@@ -9,15 +9,15 @@ class CA_layer(nn.Module):
         # global average pooling
         self.gap = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
-            nn.Conv2d(channel, channel // reduction, kernel_size=(1, 1), bias=False),
+            nn.Conv2d(channel, channel//reduction, kernel_size=(1, 1), bias=False),
             nn.GELU(),
-            nn.Conv2d(channel // reduction, channel, kernel_size=(1, 1), bias=False),
+            nn.Conv2d(channel//reduction, channel, kernel_size=(1, 1), bias=False),
             # nn.Sigmoid()
         )
 
     def forward(self, x):
         y = self.fc(self.gap(x))
-        return x * y.expand_as(x)
+        return x*y.expand_as(x)
 
 
 class Simple_CA_layer(nn.Module):
@@ -35,7 +35,7 @@ class Simple_CA_layer(nn.Module):
         )
 
     def forward(self, x):
-        return x * self.fc(self.gap(x))
+        return x*self.fc(self.gap(x))
 
 
 class ECA_layer(nn.Module):
@@ -44,18 +44,15 @@ class ECA_layer(nn.Module):
         channel: Number of channels of the input feature map
         k_size: Adaptive selection of kernel size
     """
-
     def __init__(self, channel):
         super(ECA_layer, self).__init__()
 
         b = 1
         gamma = 2
-        k_size = int(abs(math.log(channel, 2) + b) / gamma)
+        k_size = int(abs(math.log(channel, 2) + b)/gamma)
         k_size = k_size if k_size % 2 else k_size + 1
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.conv = nn.Conv1d(
-            1, 1, kernel_size=k_size, padding=(k_size - 1) // 2, bias=False
-        )
+        self.conv = nn.Conv1d(1, 1, kernel_size=k_size, padding=(k_size - 1)//2, bias=False)
         # self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
@@ -71,7 +68,7 @@ class ECA_layer(nn.Module):
         # Multi-scale information fusion
         # y = self.sigmoid(y)
 
-        return x * y.expand_as(x)
+        return x*y.expand_as(x)
 
 
 class ECA_MaxPool_layer(nn.Module):
@@ -80,18 +77,15 @@ class ECA_MaxPool_layer(nn.Module):
         channel: Number of channels of the input feature map
         k_size: Adaptive selection of kernel size
     """
-
     def __init__(self, channel):
         super(ECA_MaxPool_layer, self).__init__()
 
         b = 1
         gamma = 2
-        k_size = int(abs(math.log(channel, 2) + b) / gamma)
+        k_size = int(abs(math.log(channel, 2) + b)/gamma)
         k_size = k_size if k_size % 2 else k_size + 1
         self.max_pool = nn.AdaptiveMaxPool2d(1)
-        self.conv = nn.Conv1d(
-            1, 1, kernel_size=k_size, padding=(k_size - 1) // 2, bias=False
-        )
+        self.conv = nn.Conv1d(1, 1, kernel_size=k_size, padding=(k_size - 1)//2, bias=False)
         # self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
@@ -107,4 +101,4 @@ class ECA_MaxPool_layer(nn.Module):
         # Multi-scale information fusion
         # y = self.sigmoid(y)
 
-        return x * y.expand_as(x)
+        return x*y.expand_as(x)

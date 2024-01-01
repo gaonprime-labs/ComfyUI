@@ -16,7 +16,6 @@ import safetensors.torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "comfy"))
 
-
 import comfy.diffusers_load
 import comfy.samplers
 import comfy.sample
@@ -34,19 +33,24 @@ import importlib
 import folder_paths
 import latent_preview
 
+
 def before_node_execution():
     comfy.model_management.throw_exception_if_processing_interrupted()
+
 
 def interrupt_processing(value=True):
     comfy.model_management.interrupt_current_processing(value)
 
-MAX_RESOLUTION=8192
+
+MAX_RESOLUTION = 8192
+
 
 class CLIPTextEncode:
     @classmethod
     def INPUT_TYPES(s):
         return {"required": {"text": ("STRING", {"multiline": True}), "clip": ("CLIP", )}}
-    RETURN_TYPES = ("CONDITIONING",)
+
+    RETURN_TYPES = ("CONDITIONING", )
     FUNCTION = "encode"
 
     CATEGORY = "conditioning"
@@ -56,11 +60,13 @@ class CLIPTextEncode:
         cond, pooled = clip.encode_from_tokens(tokens, return_pooled=True)
         return ([[cond, {"pooled_output": pooled}]], )
 
+
 class ConditioningCombine:
     @classmethod
     def INPUT_TYPES(s):
         return {"required": {"conditioning_1": ("CONDITIONING", ), "conditioning_2": ("CONDITIONING", )}}
-    RETURN_TYPES = ("CONDITIONING",)
+
+    RETURN_TYPES = ("CONDITIONING", )
     FUNCTION = "combine"
 
     CATEGORY = "conditioning"
@@ -68,13 +74,24 @@ class ConditioningCombine:
     def combine(self, conditioning_1, conditioning_2):
         return (conditioning_1 + conditioning_2, )
 
-class ConditioningAverage :
+
+class ConditioningAverage:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {"conditioning_to": ("CONDITIONING", ), "conditioning_from": ("CONDITIONING", ),
-                              "conditioning_to_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01})
-                             }}
-    RETURN_TYPES = ("CONDITIONING",)
+        return {
+            "required": {
+                "conditioning_to": ("CONDITIONING", ),
+                "conditioning_from": ("CONDITIONING", ),
+                "conditioning_to_strength": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.01
+                })
+            }
+        }
+
+    RETURN_TYPES = ("CONDITIONING", )
     FUNCTION = "addWeighted"
 
     CATEGORY = "conditioning"
@@ -83,7 +100,9 @@ class ConditioningAverage :
         out = []
 
         if len(conditioning_from) > 1:
-            print("Warning: ConditioningAverage conditioning_from contains more than 1 cond, only the first one will actually be applied to conditioning_to.")
+            print(
+                "Warning: ConditioningAverage conditioning_from contains more than 1 cond, only the first one will actually be applied to conditioning_to."
+            )
 
         cond_from = conditioning_from[0][0]
         pooled_output_from = conditioning_from[0][1].get("pooled_output", None)
@@ -91,14 +110,15 @@ class ConditioningAverage :
         for i in range(len(conditioning_to)):
             t1 = conditioning_to[i][0]
             pooled_output_to = conditioning_to[i][1].get("pooled_output", pooled_output_from)
-            t0 = cond_from[:,:t1.shape[1]]
+            t0 = cond_from[:, :t1.shape[1]]
             if t0.shape[1] < t1.shape[1]:
                 t0 = torch.cat([t0] + [torch.zeros((1, (t1.shape[1] - t0.shape[1]), t1.shape[2]))], dim=1)
 
             tw = torch.mul(t1, conditioning_to_strength) + torch.mul(t0, (1.0 - conditioning_to_strength))
             t_to = conditioning_to[i][1].copy()
             if pooled_output_from is not None and pooled_output_to is not None:
-                t_to["pooled_output"] = torch.mul(pooled_output_to, conditioning_to_strength) + torch.mul(pooled_output_from, (1.0 - conditioning_to_strength))
+                t_to["pooled_output"] = torch.mul(pooled_output_to, conditioning_to_strength) + torch.mul(
+                    pooled_output_from, (1.0 - conditioning_to_strength))
             elif pooled_output_from is not None:
                 t_to["pooled_output"] = pooled_output_from
 
@@ -106,14 +126,18 @@ class ConditioningAverage :
             out.append(n)
         return (out, )
 
+
 class ConditioningConcat:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {
-            "conditioning_to": ("CONDITIONING",),
-            "conditioning_from": ("CONDITIONING",),
-            }}
-    RETURN_TYPES = ("CONDITIONING",)
+        return {
+            "required": {
+                "conditioning_to": ("CONDITIONING", ),
+                "conditioning_from": ("CONDITIONING", ),
+            }
+        }
+
+    RETURN_TYPES = ("CONDITIONING", )
     FUNCTION = "concat"
 
     CATEGORY = "conditioning"
@@ -122,29 +146,61 @@ class ConditioningConcat:
         out = []
 
         if len(conditioning_from) > 1:
-            print("Warning: ConditioningConcat conditioning_from contains more than 1 cond, only the first one will actually be applied to conditioning_to.")
+            print(
+                "Warning: ConditioningConcat conditioning_from contains more than 1 cond, only the first one will actually be applied to conditioning_to."
+            )
 
         cond_from = conditioning_from[0][0]
 
         for i in range(len(conditioning_to)):
             t1 = conditioning_to[i][0]
-            tw = torch.cat((t1, cond_from),1)
+            tw = torch.cat((t1, cond_from), 1)
             n = [tw, conditioning_to[i][1].copy()]
             out.append(n)
 
         return (out, )
 
+
 class ConditioningSetArea:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {"conditioning": ("CONDITIONING", ),
-                              "width": ("INT", {"default": 64, "min": 64, "max": MAX_RESOLUTION, "step": 8}),
-                              "height": ("INT", {"default": 64, "min": 64, "max": MAX_RESOLUTION, "step": 8}),
-                              "x": ("INT", {"default": 0, "min": 0, "max": MAX_RESOLUTION, "step": 8}),
-                              "y": ("INT", {"default": 0, "min": 0, "max": MAX_RESOLUTION, "step": 8}),
-                              "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.01}),
-                             }}
-    RETURN_TYPES = ("CONDITIONING",)
+        return {
+            "required": {
+                "conditioning": ("CONDITIONING", ),
+                "width": ("INT", {
+                    "default": 64,
+                    "min": 64,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "height": ("INT", {
+                    "default": 64,
+                    "min": 64,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "x": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "y": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "strength": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 10.0,
+                    "step": 0.01
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("CONDITIONING", )
     FUNCTION = "append"
 
     CATEGORY = "conditioning"
@@ -153,23 +209,53 @@ class ConditioningSetArea:
         c = []
         for t in conditioning:
             n = [t[0], t[1].copy()]
-            n[1]['area'] = (height // 8, width // 8, y // 8, x // 8)
+            n[1]['area'] = (height//8, width//8, y//8, x//8)
             n[1]['strength'] = strength
             n[1]['set_area_to_bounds'] = False
             c.append(n)
         return (c, )
 
+
 class ConditioningSetAreaPercentage:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {"conditioning": ("CONDITIONING", ),
-                              "width": ("FLOAT", {"default": 1.0, "min": 0, "max": 1.0, "step": 0.01}),
-                              "height": ("FLOAT", {"default": 1.0, "min": 0, "max": 1.0, "step": 0.01}),
-                              "x": ("FLOAT", {"default": 0, "min": 0, "max": 1.0, "step": 0.01}),
-                              "y": ("FLOAT", {"default": 0, "min": 0, "max": 1.0, "step": 0.01}),
-                              "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.01}),
-                             }}
-    RETURN_TYPES = ("CONDITIONING",)
+        return {
+            "required": {
+                "conditioning": ("CONDITIONING", ),
+                "width": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0,
+                    "max": 1.0,
+                    "step": 0.01
+                }),
+                "height": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0,
+                    "max": 1.0,
+                    "step": 0.01
+                }),
+                "x": ("FLOAT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 1.0,
+                    "step": 0.01
+                }),
+                "y": ("FLOAT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 1.0,
+                    "step": 0.01
+                }),
+                "strength": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 10.0,
+                    "step": 0.01
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("CONDITIONING", )
     FUNCTION = "append"
 
     CATEGORY = "conditioning"
@@ -184,15 +270,25 @@ class ConditioningSetAreaPercentage:
             c.append(n)
         return (c, )
 
+
 class ConditioningSetMask:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {"conditioning": ("CONDITIONING", ),
-                              "mask": ("MASK", ),
-                              "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.01}),
-                              "set_cond_area": (["default", "mask bounds"],),
-                             }}
-    RETURN_TYPES = ("CONDITIONING",)
+        return {
+            "required": {
+                "conditioning": ("CONDITIONING", ),
+                "mask": ("MASK", ),
+                "strength": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 10.0,
+                    "step": 0.01
+                }),
+                "set_cond_area": (["default", "mask bounds"], ),
+            }
+        }
+
+    RETURN_TYPES = ("CONDITIONING", )
     FUNCTION = "append"
 
     CATEGORY = "conditioning"
@@ -213,11 +309,13 @@ class ConditioningSetMask:
             c.append(n)
         return (c, )
 
+
 class ConditioningZeroOut:
     @classmethod
     def INPUT_TYPES(s):
         return {"required": {"conditioning": ("CONDITIONING", )}}
-    RETURN_TYPES = ("CONDITIONING",)
+
+    RETURN_TYPES = ("CONDITIONING", )
     FUNCTION = "zero_out"
 
     CATEGORY = "advanced/conditioning"
@@ -232,14 +330,29 @@ class ConditioningZeroOut:
             c.append(n)
         return (c, )
 
+
 class ConditioningSetTimestepRange:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {"conditioning": ("CONDITIONING", ),
-                             "start": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
-                             "end": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.001})
-                             }}
-    RETURN_TYPES = ("CONDITIONING",)
+        return {
+            "required": {
+                "conditioning": ("CONDITIONING", ),
+                "start": ("FLOAT", {
+                    "default": 0.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.001
+                }),
+                "end": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.001
+                })
+            }
+        }
+
+    RETURN_TYPES = ("CONDITIONING", )
     FUNCTION = "set_range"
 
     CATEGORY = "advanced/conditioning"
@@ -254,11 +367,13 @@ class ConditioningSetTimestepRange:
             c.append(n)
         return (c, )
 
+
 class VAEDecode:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "samples": ("LATENT", ), "vae": ("VAE", )}}
-    RETURN_TYPES = ("IMAGE",)
+        return {"required": {"samples": ("LATENT", ), "vae": ("VAE", )}}
+
+    RETURN_TYPES = ("IMAGE", )
     FUNCTION = "decode"
 
     CATEGORY = "latent"
@@ -266,98 +381,147 @@ class VAEDecode:
     def decode(self, vae, samples):
         return (vae.decode(samples["samples"]), )
 
+
 class VAEDecodeTiled:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {"samples": ("LATENT", ), "vae": ("VAE", ),
-                             "tile_size": ("INT", {"default": 512, "min": 320, "max": 4096, "step": 64})
-                            }}
-    RETURN_TYPES = ("IMAGE",)
+        return {
+            "required": {
+                "samples": ("LATENT", ),
+                "vae": ("VAE", ),
+                "tile_size": ("INT", {
+                    "default": 512,
+                    "min": 320,
+                    "max": 4096,
+                    "step": 64
+                })
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", )
     FUNCTION = "decode"
 
     CATEGORY = "_for_testing"
 
     def decode(self, vae, samples, tile_size):
-        return (vae.decode_tiled(samples["samples"], tile_x=tile_size // 8, tile_y=tile_size // 8, ), )
+        return (vae.decode_tiled(
+            samples["samples"],
+            tile_x=tile_size//8,
+            tile_y=tile_size//8,
+        ), )
+
 
 class VAEEncode:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "pixels": ("IMAGE", ), "vae": ("VAE", )}}
-    RETURN_TYPES = ("LATENT",)
+        return {"required": {"pixels": ("IMAGE", ), "vae": ("VAE", )}}
+
+    RETURN_TYPES = ("LATENT", )
     FUNCTION = "encode"
 
     CATEGORY = "latent"
 
     @staticmethod
     def vae_encode_crop_pixels(pixels):
-        x = (pixels.shape[1] // 8) * 8
-        y = (pixels.shape[2] // 8) * 8
+        x = (pixels.shape[1]//8)*8
+        y = (pixels.shape[2]//8)*8
         if pixels.shape[1] != x or pixels.shape[2] != y:
-            x_offset = (pixels.shape[1] % 8) // 2
-            y_offset = (pixels.shape[2] % 8) // 2
+            x_offset = (pixels.shape[1] % 8)//2
+            y_offset = (pixels.shape[2] % 8)//2
             pixels = pixels[:, x_offset:x + x_offset, y_offset:y + y_offset, :]
         return pixels
 
     def encode(self, vae, pixels):
         pixels = self.vae_encode_crop_pixels(pixels)
-        t = vae.encode(pixels[:,:,:,:3])
-        return ({"samples":t}, )
+        t = vae.encode(pixels[:, :, :, :3])
+        return ({"samples": t}, )
+
 
 class VAEEncodeTiled:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {"pixels": ("IMAGE", ), "vae": ("VAE", ),
-                             "tile_size": ("INT", {"default": 512, "min": 320, "max": 4096, "step": 64})
-                            }}
-    RETURN_TYPES = ("LATENT",)
+        return {
+            "required": {
+                "pixels": ("IMAGE", ),
+                "vae": ("VAE", ),
+                "tile_size": ("INT", {
+                    "default": 512,
+                    "min": 320,
+                    "max": 4096,
+                    "step": 64
+                })
+            }
+        }
+
+    RETURN_TYPES = ("LATENT", )
     FUNCTION = "encode"
 
     CATEGORY = "_for_testing"
 
     def encode(self, vae, pixels, tile_size):
         pixels = VAEEncode.vae_encode_crop_pixels(pixels)
-        t = vae.encode_tiled(pixels[:,:,:,:3], tile_x=tile_size, tile_y=tile_size, )
-        return ({"samples":t}, )
+        t = vae.encode_tiled(
+            pixels[:, :, :, :3],
+            tile_x=tile_size,
+            tile_y=tile_size,
+        )
+        return ({"samples": t}, )
+
 
 class VAEEncodeForInpaint:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "pixels": ("IMAGE", ), "vae": ("VAE", ), "mask": ("MASK", ), "grow_mask_by": ("INT", {"default": 6, "min": 0, "max": 64, "step": 1}),}}
-    RETURN_TYPES = ("LATENT",)
+        return {
+            "required": {
+                "pixels": ("IMAGE", ),
+                "vae": ("VAE", ),
+                "mask": ("MASK", ),
+                "grow_mask_by": ("INT", {
+                    "default": 6,
+                    "min": 0,
+                    "max": 64,
+                    "step": 1
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("LATENT", )
     FUNCTION = "encode"
 
     CATEGORY = "latent/inpaint"
 
     def encode(self, vae, pixels, mask, grow_mask_by=6):
-        x = (pixels.shape[1] // 8) * 8
-        y = (pixels.shape[2] // 8) * 8
-        mask = torch.nn.functional.interpolate(mask.reshape((-1, 1, mask.shape[-2], mask.shape[-1])), size=(pixels.shape[1], pixels.shape[2]), mode="bilinear")
+        x = (pixels.shape[1]//8)*8
+        y = (pixels.shape[2]//8)*8
+        mask = torch.nn.functional.interpolate(mask.reshape((-1, 1, mask.shape[-2], mask.shape[-1])),
+                                               size=(pixels.shape[1], pixels.shape[2]), mode="bilinear")
 
         pixels = pixels.clone()
         if pixels.shape[1] != x or pixels.shape[2] != y:
-            x_offset = (pixels.shape[1] % 8) // 2
-            y_offset = (pixels.shape[2] % 8) // 2
-            pixels = pixels[:,x_offset:x + x_offset, y_offset:y + y_offset,:]
-            mask = mask[:,:,x_offset:x + x_offset, y_offset:y + y_offset]
+            x_offset = (pixels.shape[1] % 8)//2
+            y_offset = (pixels.shape[2] % 8)//2
+            pixels = pixels[:, x_offset:x + x_offset, y_offset:y + y_offset, :]
+            mask = mask[:, :, x_offset:x + x_offset, y_offset:y + y_offset]
 
         #grow mask by a few pixels to keep things seamless in latent space
         if grow_mask_by == 0:
             mask_erosion = mask
         else:
             kernel_tensor = torch.ones((1, 1, grow_mask_by, grow_mask_by))
-            padding = math.ceil((grow_mask_by - 1) / 2)
+            padding = math.ceil((grow_mask_by - 1)/2)
 
-            mask_erosion = torch.clamp(torch.nn.functional.conv2d(mask.round(), kernel_tensor, padding=padding), 0, 1)
+            mask_erosion = torch.clamp(
+                torch.nn.functional.conv2d(mask.round(), kernel_tensor, padding=padding), 0, 1)
 
         m = (1.0 - mask.round()).squeeze(1)
         for i in range(3):
-            pixels[:,:,:,i] -= 0.5
-            pixels[:,:,:,i] *= m
-            pixels[:,:,:,i] += 0.5
+            pixels[:, :, :, i] -= 0.5
+            pixels[:, :, :, i] *= m
+            pixels[:, :, :, i] += 0.5
         t = vae.encode(pixels)
 
-        return ({"samples":t, "noise_mask": (mask_erosion[:,:,:x,:y].round())}, )
+        return ({"samples": t, "noise_mask": (mask_erosion[:, :, :x, :y].round())}, )
+
 
 class SaveLatent:
     def __init__(self):
@@ -365,10 +529,19 @@ class SaveLatent:
 
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "samples": ("LATENT", ),
-                              "filename_prefix": ("STRING", {"default": "latents/ComfyUI"})},
-                "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
-                }
+        return {
+            "required": {
+                "samples": ("LATENT", ),
+                "filename_prefix": ("STRING", {
+                    "default": "latents/ComfyUI"
+                })
+            },
+            "hidden": {
+                "prompt": "PROMPT",
+                "extra_pnginfo": "EXTRA_PNGINFO"
+            },
+        }
+
     RETURN_TYPES = ()
     FUNCTION = "save"
 
@@ -377,7 +550,8 @@ class SaveLatent:
     CATEGORY = "_for_testing"
 
     def save(self, samples, filename_prefix="ComfyUI", prompt=None, extra_pnginfo=None):
-        full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(filename_prefix, self.output_dir)
+        full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(
+            filename_prefix, self.output_dir)
 
         # support save metadata for latent sharing
         prompt_info = ""
@@ -394,11 +568,7 @@ class SaveLatent:
         file = f"{filename}_{counter:05}_.latent"
 
         results = list()
-        results.append({
-            "filename": file,
-            "subfolder": subfolder,
-            "type": "output"
-        })
+        results.append({"filename": file, "subfolder": subfolder, "type": "output"})
 
         file = os.path.join(full_output_folder, file)
 
@@ -407,15 +577,24 @@ class SaveLatent:
         output["latent_format_version_0"] = torch.tensor([])
 
         comfy.utils.save_torch_file(output, file, metadata=metadata)
-        return { "ui": { "latents": results } }
+        return {"ui": {"latents": results}}
 
 
 class LoadLatent:
     @classmethod
     def INPUT_TYPES(s):
         input_dir = folder_paths.get_input_directory()
-        files = [f for f in os.listdir(input_dir) if os.path.isfile(os.path.join(input_dir, f)) and f.endswith(".latent")]
-        return {"required": {"latent": [sorted(files), ]}, }
+        files = [
+            f for f in os.listdir(input_dir)
+            if os.path.isfile(os.path.join(input_dir, f)) and f.endswith(".latent")
+        ]
+        return {
+            "required": {
+                "latent": [
+                    sorted(files),
+                ]
+            },
+        }
 
     CATEGORY = "_for_testing"
 
@@ -427,8 +606,8 @@ class LoadLatent:
         latent = safetensors.torch.load_file(latent_path, device="cpu")
         multiplier = 1.0
         if "latent_format_version_0" not in latent:
-            multiplier = 1.0 / 0.18215
-        samples = {"samples": latent["latent_tensor"].float() * multiplier}
+            multiplier = 1.0/0.18215
+        samples = {"samples": latent["latent_tensor"].float()*multiplier}
         return (samples, )
 
     @classmethod
@@ -449,8 +628,13 @@ class LoadLatent:
 class CheckpointLoader:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "config_name": (folder_paths.get_filename_list("configs"), ),
-                              "ckpt_name": (folder_paths.get_filename_list("checkpoints"), )}}
+        return {
+            "required": {
+                "config_name": (folder_paths.get_filename_list("configs"), ),
+                "ckpt_name": (folder_paths.get_filename_list("checkpoints"), )
+            }
+        }
+
     RETURN_TYPES = ("MODEL", "CLIP", "VAE")
     FUNCTION = "load_checkpoint"
 
@@ -459,13 +643,19 @@ class CheckpointLoader:
     def load_checkpoint(self, config_name, ckpt_name, output_vae=True, output_clip=True):
         config_path = folder_paths.get_full_path("configs", config_name)
         ckpt_path = folder_paths.get_full_path("checkpoints", ckpt_name)
-        return comfy.sd.load_checkpoint(config_path, ckpt_path, output_vae=True, output_clip=True, embedding_directory=folder_paths.get_folder_paths("embeddings"))
+        return comfy.sd.load_checkpoint(config_path, ckpt_path, output_vae=True, output_clip=True,
+                                        embedding_directory=folder_paths.get_folder_paths("embeddings"))
+
 
 class CheckpointLoaderSimple:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "ckpt_name": (folder_paths.get_filename_list("checkpoints"), ),
-                             }}
+        return {
+            "required": {
+                "ckpt_name": (folder_paths.get_filename_list("checkpoints"), ),
+            }
+        }
+
     RETURN_TYPES = ("MODEL", "CLIP", "VAE")
     FUNCTION = "load_checkpoint"
 
@@ -473,8 +663,11 @@ class CheckpointLoaderSimple:
 
     def load_checkpoint(self, ckpt_name, output_vae=True, output_clip=True):
         ckpt_path = folder_paths.get_full_path("checkpoints", ckpt_name)
-        out = comfy.sd.load_checkpoint_guess_config(ckpt_path, output_vae=True, output_clip=True, embedding_directory=folder_paths.get_folder_paths("embeddings"))
+        out = comfy.sd.load_checkpoint_guess_config(
+            ckpt_path, output_vae=True, output_clip=True,
+            embedding_directory=folder_paths.get_folder_paths("embeddings"))
         return out[:3]
+
 
 class DiffusersLoader:
     @classmethod
@@ -486,7 +679,12 @@ class DiffusersLoader:
                     if "model_index.json" in files:
                         paths.append(os.path.relpath(root, start=search_path))
 
-        return {"required": {"model_path": (paths,), }}
+        return {
+            "required": {
+                "model_path": (paths, ),
+            }
+        }
+
     RETURN_TYPES = ("MODEL", "CLIP", "VAE")
     FUNCTION = "load_checkpoint"
 
@@ -500,14 +698,20 @@ class DiffusersLoader:
                     model_path = path
                     break
 
-        return comfy.diffusers_load.load_diffusers(model_path, output_vae=output_vae, output_clip=output_clip, embedding_directory=folder_paths.get_folder_paths("embeddings"))
+        return comfy.diffusers_load.load_diffusers(
+            model_path, output_vae=output_vae, output_clip=output_clip,
+            embedding_directory=folder_paths.get_folder_paths("embeddings"))
 
 
 class unCLIPCheckpointLoader:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "ckpt_name": (folder_paths.get_filename_list("checkpoints"), ),
-                             }}
+        return {
+            "required": {
+                "ckpt_name": (folder_paths.get_filename_list("checkpoints"), ),
+            }
+        }
+
     RETURN_TYPES = ("MODEL", "CLIP", "VAE", "CLIP_VISION")
     FUNCTION = "load_checkpoint"
 
@@ -515,16 +719,28 @@ class unCLIPCheckpointLoader:
 
     def load_checkpoint(self, ckpt_name, output_vae=True, output_clip=True):
         ckpt_path = folder_paths.get_full_path("checkpoints", ckpt_name)
-        out = comfy.sd.load_checkpoint_guess_config(ckpt_path, output_vae=True, output_clip=True, output_clipvision=True, embedding_directory=folder_paths.get_folder_paths("embeddings"))
+        out = comfy.sd.load_checkpoint_guess_config(
+            ckpt_path, output_vae=True, output_clip=True, output_clipvision=True,
+            embedding_directory=folder_paths.get_folder_paths("embeddings"))
         return out
+
 
 class CLIPSetLastLayer:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "clip": ("CLIP", ),
-                              "stop_at_clip_layer": ("INT", {"default": -1, "min": -24, "max": -1, "step": 1}),
-                              }}
-    RETURN_TYPES = ("CLIP",)
+        return {
+            "required": {
+                "clip": ("CLIP", ),
+                "stop_at_clip_layer": ("INT", {
+                    "default": -1,
+                    "min": -24,
+                    "max": -1,
+                    "step": 1
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("CLIP", )
     FUNCTION = "set_last_layer"
 
     CATEGORY = "conditioning"
@@ -532,7 +748,8 @@ class CLIPSetLastLayer:
     def set_last_layer(self, clip, stop_at_clip_layer):
         clip = clip.clone()
         clip.clip_layer(stop_at_clip_layer)
-        return (clip,)
+        return (clip, )
+
 
 class LoraLoader:
     def __init__(self):
@@ -540,12 +757,26 @@ class LoraLoader:
 
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "model": ("MODEL",),
-                              "clip": ("CLIP", ),
-                              "lora_name": (folder_paths.get_filename_list("loras"), ),
-                              "strength_model": ("FLOAT", {"default": 1.0, "min": -20.0, "max": 20.0, "step": 0.01}),
-                              "strength_clip": ("FLOAT", {"default": 1.0, "min": -20.0, "max": 20.0, "step": 0.01}),
-                              }}
+        return {
+            "required": {
+                "model": ("MODEL", ),
+                "clip": ("CLIP", ),
+                "lora_name": (folder_paths.get_filename_list("loras"), ),
+                "strength_model": ("FLOAT", {
+                    "default": 1.0,
+                    "min": -20.0,
+                    "max": 20.0,
+                    "step": 0.01
+                }),
+                "strength_clip": ("FLOAT", {
+                    "default": 1.0,
+                    "min": -20.0,
+                    "max": 20.0,
+                    "step": 0.01
+                }),
+            }
+        }
+
     RETURN_TYPES = ("MODEL", "CLIP")
     FUNCTION = "load_lora"
 
@@ -569,21 +800,33 @@ class LoraLoader:
             lora = comfy.utils.load_torch_file(lora_path, safe_load=True)
             self.loaded_lora = (lora_path, lora)
 
-        model_lora, clip_lora = comfy.sd.load_lora_for_models(model, clip, lora, strength_model, strength_clip)
+        model_lora, clip_lora = comfy.sd.load_lora_for_models(model, clip, lora, strength_model,
+                                                              strength_clip)
         return (model_lora, clip_lora)
+
 
 class LoraLoaderModelOnly(LoraLoader):
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "model": ("MODEL",),
-                              "lora_name": (folder_paths.get_filename_list("loras"), ),
-                              "strength_model": ("FLOAT", {"default": 1.0, "min": -20.0, "max": 20.0, "step": 0.01}),
-                              }}
-    RETURN_TYPES = ("MODEL",)
+        return {
+            "required": {
+                "model": ("MODEL", ),
+                "lora_name": (folder_paths.get_filename_list("loras"), ),
+                "strength_model": ("FLOAT", {
+                    "default": 1.0,
+                    "min": -20.0,
+                    "max": 20.0,
+                    "step": 0.01
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("MODEL", )
     FUNCTION = "load_lora_model_only"
 
     def load_lora_model_only(self, model, lora_name, strength_model):
-        return (self.load_lora(model, None, lora_name, strength_model, 0)[0],)
+        return (self.load_lora(model, None, lora_name, strength_model, 0)[0], )
+
 
 class VAELoader:
     @staticmethod
@@ -634,8 +877,9 @@ class VAELoader:
 
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "vae_name": (s.vae_list(), )}}
-    RETURN_TYPES = ("VAE",)
+        return {"required": {"vae_name": (s.vae_list(), )}}
+
+    RETURN_TYPES = ("VAE", )
     FUNCTION = "load_vae"
 
     CATEGORY = "loaders"
@@ -648,14 +892,15 @@ class VAELoader:
             vae_path = folder_paths.get_full_path("vae", vae_name)
             sd = comfy.utils.load_torch_file(vae_path)
         vae = comfy.sd.VAE(sd=sd)
-        return (vae,)
+        return (vae, )
+
 
 class ControlNetLoader:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "control_net_name": (folder_paths.get_filename_list("controlnet"), )}}
+        return {"required": {"control_net_name": (folder_paths.get_filename_list("controlnet"), )}}
 
-    RETURN_TYPES = ("CONTROL_NET",)
+    RETURN_TYPES = ("CONTROL_NET", )
     FUNCTION = "load_controlnet"
 
     CATEGORY = "loaders"
@@ -663,15 +908,20 @@ class ControlNetLoader:
     def load_controlnet(self, control_net_name):
         controlnet_path = folder_paths.get_full_path("controlnet", control_net_name)
         controlnet = comfy.controlnet.load_controlnet(controlnet_path)
-        return (controlnet,)
+        return (controlnet, )
+
 
 class DiffControlNetLoader:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "model": ("MODEL",),
-                              "control_net_name": (folder_paths.get_filename_list("controlnet"), )}}
+        return {
+            "required": {
+                "model": ("MODEL", ),
+                "control_net_name": (folder_paths.get_filename_list("controlnet"), )
+            }
+        }
 
-    RETURN_TYPES = ("CONTROL_NET",)
+    RETURN_TYPES = ("CONTROL_NET", )
     FUNCTION = "load_controlnet"
 
     CATEGORY = "loaders"
@@ -679,18 +929,27 @@ class DiffControlNetLoader:
     def load_controlnet(self, model, control_net_name):
         controlnet_path = folder_paths.get_full_path("controlnet", control_net_name)
         controlnet = comfy.controlnet.load_controlnet(controlnet_path, model)
-        return (controlnet,)
+        return (controlnet, )
 
 
 class ControlNetApply:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {"conditioning": ("CONDITIONING", ),
-                             "control_net": ("CONTROL_NET", ),
-                             "image": ("IMAGE", ),
-                             "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.01})
-                             }}
-    RETURN_TYPES = ("CONDITIONING",)
+        return {
+            "required": {
+                "conditioning": ("CONDITIONING", ),
+                "control_net": ("CONTROL_NET", ),
+                "image": ("IMAGE", ),
+                "strength": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 10.0,
+                    "step": 0.01
+                })
+            }
+        }
+
+    RETURN_TYPES = ("CONDITIONING", )
     FUNCTION = "apply_controlnet"
 
     CATEGORY = "conditioning"
@@ -700,7 +959,7 @@ class ControlNetApply:
             return (conditioning, )
 
         c = []
-        control_hint = image.movedim(-1,1)
+        control_hint = image.movedim(-1, 1)
         for t in conditioning:
             n = [t[0], t[1].copy()]
             c_net = control_net.copy().set_cond_hint(control_hint, strength)
@@ -715,16 +974,34 @@ class ControlNetApply:
 class ControlNetApplyAdvanced:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {"positive": ("CONDITIONING", ),
-                             "negative": ("CONDITIONING", ),
-                             "control_net": ("CONTROL_NET", ),
-                             "image": ("IMAGE", ),
-                             "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.01}),
-                             "start_percent": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
-                             "end_percent": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.001})
-                             }}
+        return {
+            "required": {
+                "positive": ("CONDITIONING", ),
+                "negative": ("CONDITIONING", ),
+                "control_net": ("CONTROL_NET", ),
+                "image": ("IMAGE", ),
+                "strength": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 10.0,
+                    "step": 0.01
+                }),
+                "start_percent": ("FLOAT", {
+                    "default": 0.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.001
+                }),
+                "end_percent": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.001
+                })
+            }
+        }
 
-    RETURN_TYPES = ("CONDITIONING","CONDITIONING")
+    RETURN_TYPES = ("CONDITIONING", "CONDITIONING")
     RETURN_NAMES = ("positive", "negative")
     FUNCTION = "apply_controlnet"
 
@@ -734,7 +1011,7 @@ class ControlNetApplyAdvanced:
         if strength == 0:
             return (positive, negative)
 
-        control_hint = image.movedim(-1,1)
+        control_hint = image.movedim(-1, 1)
         cnets = {}
 
         out = []
@@ -747,7 +1024,8 @@ class ControlNetApplyAdvanced:
                 if prev_cnet in cnets:
                     c_net = cnets[prev_cnet]
                 else:
-                    c_net = control_net.copy().set_cond_hint(control_hint, strength, (start_percent, end_percent))
+                    c_net = control_net.copy().set_cond_hint(control_hint, strength,
+                                                             (start_percent, end_percent))
                     c_net.set_previous_controlnet(prev_cnet)
                     cnets[prev_cnet] = c_net
 
@@ -762,9 +1040,13 @@ class ControlNetApplyAdvanced:
 class UNETLoader:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "unet_name": (folder_paths.get_filename_list("unet"), ),
-                             }}
-    RETURN_TYPES = ("MODEL",)
+        return {
+            "required": {
+                "unet_name": (folder_paths.get_filename_list("unet"), ),
+            }
+        }
+
+    RETURN_TYPES = ("MODEL", )
     FUNCTION = "load_unet"
 
     CATEGORY = "advanced/loaders"
@@ -772,29 +1054,41 @@ class UNETLoader:
     def load_unet(self, unet_name):
         unet_path = folder_paths.get_full_path("unet", unet_name)
         model = comfy.sd.load_unet(unet_path)
-        return (model,)
+        return (model, )
+
 
 class CLIPLoader:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "clip_name": (folder_paths.get_filename_list("clip"), ),
-                             }}
-    RETURN_TYPES = ("CLIP",)
+        return {
+            "required": {
+                "clip_name": (folder_paths.get_filename_list("clip"), ),
+            }
+        }
+
+    RETURN_TYPES = ("CLIP", )
     FUNCTION = "load_clip"
 
     CATEGORY = "advanced/loaders"
 
     def load_clip(self, clip_name):
         clip_path = folder_paths.get_full_path("clip", clip_name)
-        clip = comfy.sd.load_clip(ckpt_paths=[clip_path], embedding_directory=folder_paths.get_folder_paths("embeddings"))
-        return (clip,)
+        clip = comfy.sd.load_clip(ckpt_paths=[clip_path],
+                                  embedding_directory=folder_paths.get_folder_paths("embeddings"))
+        return (clip, )
+
 
 class DualCLIPLoader:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "clip_name1": (folder_paths.get_filename_list("clip"), ), "clip_name2": (folder_paths.get_filename_list("clip"), ),
-                             }}
-    RETURN_TYPES = ("CLIP",)
+        return {
+            "required": {
+                "clip_name1": (folder_paths.get_filename_list("clip"), ),
+                "clip_name2": (folder_paths.get_filename_list("clip"), ),
+            }
+        }
+
+    RETURN_TYPES = ("CLIP", )
     FUNCTION = "load_clip"
 
     CATEGORY = "advanced/loaders"
@@ -802,15 +1096,21 @@ class DualCLIPLoader:
     def load_clip(self, clip_name1, clip_name2):
         clip_path1 = folder_paths.get_full_path("clip", clip_name1)
         clip_path2 = folder_paths.get_full_path("clip", clip_name2)
-        clip = comfy.sd.load_clip(ckpt_paths=[clip_path1, clip_path2], embedding_directory=folder_paths.get_folder_paths("embeddings"))
-        return (clip,)
+        clip = comfy.sd.load_clip(ckpt_paths=[clip_path1, clip_path2],
+                                  embedding_directory=folder_paths.get_folder_paths("embeddings"))
+        return (clip, )
+
 
 class CLIPVisionLoader:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "clip_name": (folder_paths.get_filename_list("clip_vision"), ),
-                             }}
-    RETURN_TYPES = ("CLIP_VISION",)
+        return {
+            "required": {
+                "clip_name": (folder_paths.get_filename_list("clip_vision"), ),
+            }
+        }
+
+    RETURN_TYPES = ("CLIP_VISION", )
     FUNCTION = "load_clip"
 
     CATEGORY = "loaders"
@@ -818,29 +1118,30 @@ class CLIPVisionLoader:
     def load_clip(self, clip_name):
         clip_path = folder_paths.get_full_path("clip_vision", clip_name)
         clip_vision = comfy.clip_vision.load(clip_path)
-        return (clip_vision,)
+        return (clip_vision, )
+
 
 class CLIPVisionEncode:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "clip_vision": ("CLIP_VISION",),
-                              "image": ("IMAGE",)
-                             }}
-    RETURN_TYPES = ("CLIP_VISION_OUTPUT",)
+        return {"required": {"clip_vision": ("CLIP_VISION", ), "image": ("IMAGE", )}}
+
+    RETURN_TYPES = ("CLIP_VISION_OUTPUT", )
     FUNCTION = "encode"
 
     CATEGORY = "conditioning"
 
     def encode(self, clip_vision, image):
         output = clip_vision.encode_image(image)
-        return (output,)
+        return (output, )
+
 
 class StyleModelLoader:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "style_model_name": (folder_paths.get_filename_list("style_models"), )}}
+        return {"required": {"style_model_name": (folder_paths.get_filename_list("style_models"), )}}
 
-    RETURN_TYPES = ("STYLE_MODEL",)
+    RETURN_TYPES = ("STYLE_MODEL", )
     FUNCTION = "load_style_model"
 
     CATEGORY = "loaders"
@@ -848,17 +1149,21 @@ class StyleModelLoader:
     def load_style_model(self, style_model_name):
         style_model_path = folder_paths.get_full_path("style_models", style_model_name)
         style_model = comfy.sd.load_style_model(style_model_path)
-        return (style_model,)
+        return (style_model, )
 
 
 class StyleModelApply:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {"conditioning": ("CONDITIONING", ),
-                             "style_model": ("STYLE_MODEL", ),
-                             "clip_vision_output": ("CLIP_VISION_OUTPUT", ),
-                             }}
-    RETURN_TYPES = ("CONDITIONING",)
+        return {
+            "required": {
+                "conditioning": ("CONDITIONING", ),
+                "style_model": ("STYLE_MODEL", ),
+                "clip_vision_output": ("CLIP_VISION_OUTPUT", ),
+            }
+        }
+
+    RETURN_TYPES = ("CONDITIONING", )
     FUNCTION = "apply_stylemodel"
 
     CATEGORY = "conditioning/style_model"
@@ -871,15 +1176,30 @@ class StyleModelApply:
             c.append(n)
         return (c, )
 
+
 class unCLIPConditioning:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {"conditioning": ("CONDITIONING", ),
-                             "clip_vision_output": ("CLIP_VISION_OUTPUT", ),
-                             "strength": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01}),
-                             "noise_augmentation": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-                             }}
-    RETURN_TYPES = ("CONDITIONING",)
+        return {
+            "required": {
+                "conditioning": ("CONDITIONING", ),
+                "clip_vision_output": ("CLIP_VISION_OUTPUT", ),
+                "strength": ("FLOAT", {
+                    "default": 1.0,
+                    "min": -10.0,
+                    "max": 10.0,
+                    "step": 0.01
+                }),
+                "noise_augmentation": ("FLOAT", {
+                    "default": 0.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.01
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("CONDITIONING", )
     FUNCTION = "apply_adm"
 
     CATEGORY = "conditioning"
@@ -891,7 +1211,11 @@ class unCLIPConditioning:
         c = []
         for t in conditioning:
             o = t[1].copy()
-            x = {"clip_vision_output": clip_vision_output, "strength": strength, "noise_augmentation": noise_augmentation}
+            x = {
+                "clip_vision_output": clip_vision_output,
+                "strength": strength,
+                "noise_augmentation": noise_augmentation
+            }
             if "unclip_conditioning" in o:
                 o["unclip_conditioning"] = o["unclip_conditioning"][:] + [x]
             else:
@@ -900,12 +1224,13 @@ class unCLIPConditioning:
             c.append(n)
         return (c, )
 
+
 class GLIGENLoader:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "gligen_name": (folder_paths.get_filename_list("gligen"), )}}
+        return {"required": {"gligen_name": (folder_paths.get_filename_list("gligen"), )}}
 
-    RETURN_TYPES = ("GLIGEN",)
+    RETURN_TYPES = ("GLIGEN", )
     FUNCTION = "load_gligen"
 
     CATEGORY = "loaders"
@@ -913,21 +1238,48 @@ class GLIGENLoader:
     def load_gligen(self, gligen_name):
         gligen_path = folder_paths.get_full_path("gligen", gligen_name)
         gligen = comfy.sd.load_gligen(gligen_path)
-        return (gligen,)
+        return (gligen, )
+
 
 class GLIGENTextBoxApply:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {"conditioning_to": ("CONDITIONING", ),
-                              "clip": ("CLIP", ),
-                              "gligen_textbox_model": ("GLIGEN", ),
-                              "text": ("STRING", {"multiline": True}),
-                              "width": ("INT", {"default": 64, "min": 8, "max": MAX_RESOLUTION, "step": 8}),
-                              "height": ("INT", {"default": 64, "min": 8, "max": MAX_RESOLUTION, "step": 8}),
-                              "x": ("INT", {"default": 0, "min": 0, "max": MAX_RESOLUTION, "step": 8}),
-                              "y": ("INT", {"default": 0, "min": 0, "max": MAX_RESOLUTION, "step": 8}),
-                             }}
-    RETURN_TYPES = ("CONDITIONING",)
+        return {
+            "required": {
+                "conditioning_to": ("CONDITIONING", ),
+                "clip": ("CLIP", ),
+                "gligen_textbox_model": ("GLIGEN", ),
+                "text": ("STRING", {
+                    "multiline": True
+                }),
+                "width": ("INT", {
+                    "default": 64,
+                    "min": 8,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "height": ("INT", {
+                    "default": 64,
+                    "min": 8,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "x": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "y": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("CONDITIONING", )
     FUNCTION = "append"
 
     CATEGORY = "conditioning/gligen"
@@ -937,7 +1289,7 @@ class GLIGENTextBoxApply:
         cond, cond_pooled = clip.encode_from_tokens(clip.tokenize(text), return_pooled=True)
         for t in conditioning_to:
             n = [t[0], t[1].copy()]
-            position_params = [(cond_pooled, height // 8, width // 8, y // 8, x // 8)]
+            position_params = [(cond_pooled, height//8, width//8, y//8, x//8)]
             prev = []
             if "gligen" in n[1]:
                 prev = n[1]['gligen'][2]
@@ -946,33 +1298,65 @@ class GLIGENTextBoxApply:
             c.append(n)
         return (c, )
 
+
 class EmptyLatentImage:
     def __init__(self):
         self.device = comfy.model_management.intermediate_device()
 
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "width": ("INT", {"default": 512, "min": 16, "max": MAX_RESOLUTION, "step": 8}),
-                              "height": ("INT", {"default": 512, "min": 16, "max": MAX_RESOLUTION, "step": 8}),
-                              "batch_size": ("INT", {"default": 1, "min": 1, "max": 4096})}}
-    RETURN_TYPES = ("LATENT",)
+        return {
+            "required": {
+                "width": ("INT", {
+                    "default": 512,
+                    "min": 16,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "height": ("INT", {
+                    "default": 512,
+                    "min": 16,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "batch_size": ("INT", {
+                    "default": 1,
+                    "min": 1,
+                    "max": 4096
+                })
+            }
+        }
+
+    RETURN_TYPES = ("LATENT", )
     FUNCTION = "generate"
 
     CATEGORY = "latent"
 
     def generate(self, width, height, batch_size=1):
-        latent = torch.zeros([batch_size, 4, height // 8, width // 8], device=self.device)
-        return ({"samples":latent}, )
+        latent = torch.zeros([batch_size, 4, height//8, width//8], device=self.device)
+        return ({"samples": latent}, )
 
 
 class LatentFromBatch:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "samples": ("LATENT",),
-                              "batch_index": ("INT", {"default": 0, "min": 0, "max": 63}),
-                              "length": ("INT", {"default": 1, "min": 1, "max": 64}),
-                              }}
-    RETURN_TYPES = ("LATENT",)
+        return {
+            "required": {
+                "samples": ("LATENT", ),
+                "batch_index": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 63
+                }),
+                "length": ("INT", {
+                    "default": 1,
+                    "min": 1,
+                    "max": 64
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("LATENT", )
     FUNCTION = "frombatch"
 
     CATEGORY = "latent/batch"
@@ -989,21 +1373,30 @@ class LatentFromBatch:
                 s["noise_mask"] = masks.clone()
             else:
                 if masks.shape[0] < s_in.shape[0]:
-                    masks = masks.repeat(math.ceil(s_in.shape[0] / masks.shape[0]), 1, 1, 1)[:s_in.shape[0]]
+                    masks = masks.repeat(math.ceil(s_in.shape[0]/masks.shape[0]), 1, 1, 1)[:s_in.shape[0]]
                 s["noise_mask"] = masks[batch_index:batch_index + length].clone()
         if "batch_index" not in s:
-            s["batch_index"] = [x for x in range(batch_index, batch_index+length)]
+            s["batch_index"] = [x for x in range(batch_index, batch_index + length)]
         else:
             s["batch_index"] = samples["batch_index"][batch_index:batch_index + length]
-        return (s,)
-    
+        return (s, )
+
+
 class RepeatLatentBatch:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "samples": ("LATENT",),
-                              "amount": ("INT", {"default": 1, "min": 1, "max": 64}),
-                              }}
-    RETURN_TYPES = ("LATENT",)
+        return {
+            "required": {
+                "samples": ("LATENT", ),
+                "amount": ("INT", {
+                    "default": 1,
+                    "min": 1,
+                    "max": 64
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("LATENT", )
     FUNCTION = "repeat"
 
     CATEGORY = "latent/batch"
@@ -1011,17 +1404,20 @@ class RepeatLatentBatch:
     def repeat(self, samples, amount):
         s = samples.copy()
         s_in = samples["samples"]
-        
-        s["samples"] = s_in.repeat((amount, 1,1,1))
+
+        s["samples"] = s_in.repeat((amount, 1, 1, 1))
         if "noise_mask" in samples and samples["noise_mask"].shape[0] > 1:
             masks = samples["noise_mask"]
             if masks.shape[0] < s_in.shape[0]:
-                masks = masks.repeat(math.ceil(s_in.shape[0] / masks.shape[0]), 1, 1, 1)[:s_in.shape[0]]
-            s["noise_mask"] = samples["noise_mask"].repeat((amount, 1,1,1))
+                masks = masks.repeat(math.ceil(s_in.shape[0]/masks.shape[0]), 1, 1, 1)[:s_in.shape[0]]
+            s["noise_mask"] = samples["noise_mask"].repeat((amount, 1, 1, 1))
         if "batch_index" in s:
             offset = max(s["batch_index"]) - min(s["batch_index"]) + 1
-            s["batch_index"] = s["batch_index"] + [x + (i * offset) for i in range(1, amount) for x in s["batch_index"]]
-        return (s,)
+            s["batch_index"] = s["batch_index"] + [
+                x + (i*offset) for i in range(1, amount) for x in s["batch_index"]
+            ]
+        return (s, )
+
 
 class LatentUpscale:
     upscale_methods = ["nearest-exact", "bilinear", "area", "bicubic", "bislerp"]
@@ -1029,11 +1425,27 @@ class LatentUpscale:
 
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "samples": ("LATENT",), "upscale_method": (s.upscale_methods,),
-                              "width": ("INT", {"default": 512, "min": 0, "max": MAX_RESOLUTION, "step": 8}),
-                              "height": ("INT", {"default": 512, "min": 0, "max": MAX_RESOLUTION, "step": 8}),
-                              "crop": (s.crop_methods,)}}
-    RETURN_TYPES = ("LATENT",)
+        return {
+            "required": {
+                "samples": ("LATENT", ),
+                "upscale_method": (s.upscale_methods, ),
+                "width": ("INT", {
+                    "default": 512,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "height": ("INT", {
+                    "default": 512,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "crop": (s.crop_methods, )
+            }
+        }
+
+    RETURN_TYPES = ("LATENT", )
     FUNCTION = "upscale"
 
     CATEGORY = "latent"
@@ -1046,43 +1458,62 @@ class LatentUpscale:
 
             if width == 0:
                 height = max(64, height)
-                width = max(64, round(samples["samples"].shape[3] * height / samples["samples"].shape[2]))
+                width = max(64, round(samples["samples"].shape[3]*height/samples["samples"].shape[2]))
             elif height == 0:
                 width = max(64, width)
-                height = max(64, round(samples["samples"].shape[2] * width / samples["samples"].shape[3]))
+                height = max(64, round(samples["samples"].shape[2]*width/samples["samples"].shape[3]))
             else:
                 width = max(64, width)
                 height = max(64, height)
 
-            s["samples"] = comfy.utils.common_upscale(samples["samples"], width // 8, height // 8, upscale_method, crop)
-        return (s,)
+            s["samples"] = comfy.utils.common_upscale(samples["samples"], width//8, height//8, upscale_method,
+                                                      crop)
+        return (s, )
+
 
 class LatentUpscaleBy:
     upscale_methods = ["nearest-exact", "bilinear", "area", "bicubic", "bislerp"]
 
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "samples": ("LATENT",), "upscale_method": (s.upscale_methods,),
-                              "scale_by": ("FLOAT", {"default": 1.5, "min": 0.01, "max": 8.0, "step": 0.01}),}}
-    RETURN_TYPES = ("LATENT",)
+        return {
+            "required": {
+                "samples": ("LATENT", ),
+                "upscale_method": (s.upscale_methods, ),
+                "scale_by": ("FLOAT", {
+                    "default": 1.5,
+                    "min": 0.01,
+                    "max": 8.0,
+                    "step": 0.01
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("LATENT", )
     FUNCTION = "upscale"
 
     CATEGORY = "latent"
 
     def upscale(self, samples, upscale_method, scale_by):
         s = samples.copy()
-        width = round(samples["samples"].shape[3] * scale_by)
-        height = round(samples["samples"].shape[2] * scale_by)
-        s["samples"] = comfy.utils.common_upscale(samples["samples"], width, height, upscale_method, "disabled")
-        return (s,)
+        width = round(samples["samples"].shape[3]*scale_by)
+        height = round(samples["samples"].shape[2]*scale_by)
+        s["samples"] = comfy.utils.common_upscale(samples["samples"], width, height, upscale_method,
+                                                  "disabled")
+        return (s, )
+
 
 class LatentRotate:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "samples": ("LATENT",),
-                              "rotation": (["none", "90 degrees", "180 degrees", "270 degrees"],),
-                              }}
-    RETURN_TYPES = ("LATENT",)
+        return {
+            "required": {
+                "samples": ("LATENT", ),
+                "rotation": (["none", "90 degrees", "180 degrees", "270 degrees"], ),
+            }
+        }
+
+    RETURN_TYPES = ("LATENT", )
     FUNCTION = "rotate"
 
     CATEGORY = "latent/transform"
@@ -1098,15 +1529,20 @@ class LatentRotate:
             rotate_by = 3
 
         s["samples"] = torch.rot90(samples["samples"], k=rotate_by, dims=[3, 2])
-        return (s,)
+        return (s, )
+
 
 class LatentFlip:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "samples": ("LATENT",),
-                              "flip_method": (["x-axis: vertically", "y-axis: horizontally"],),
-                              }}
-    RETURN_TYPES = ("LATENT",)
+        return {
+            "required": {
+                "samples": ("LATENT", ),
+                "flip_method": (["x-axis: vertically", "y-axis: horizontally"], ),
+            }
+        }
+
+    RETURN_TYPES = ("LATENT", )
     FUNCTION = "flip"
 
     CATEGORY = "latent/transform"
@@ -1118,70 +1554,97 @@ class LatentFlip:
         elif flip_method.startswith("y"):
             s["samples"] = torch.flip(samples["samples"], dims=[3])
 
-        return (s,)
+        return (s, )
+
 
 class LatentComposite:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "samples_to": ("LATENT",),
-                              "samples_from": ("LATENT",),
-                              "x": ("INT", {"default": 0, "min": 0, "max": MAX_RESOLUTION, "step": 8}),
-                              "y": ("INT", {"default": 0, "min": 0, "max": MAX_RESOLUTION, "step": 8}),
-                              "feather": ("INT", {"default": 0, "min": 0, "max": MAX_RESOLUTION, "step": 8}),
-                              }}
-    RETURN_TYPES = ("LATENT",)
+        return {
+            "required": {
+                "samples_to": ("LATENT", ),
+                "samples_from": ("LATENT", ),
+                "x": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "y": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "feather": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("LATENT", )
     FUNCTION = "composite"
 
     CATEGORY = "latent"
 
     def composite(self, samples_to, samples_from, x, y, composite_method="normal", feather=0):
-        x =  x // 8
-        y = y // 8
-        feather = feather // 8
+        x = x//8
+        y = y//8
+        feather = feather//8
         samples_out = samples_to.copy()
         s = samples_to["samples"].clone()
         samples_to = samples_to["samples"]
         samples_from = samples_from["samples"]
         if feather == 0:
-            s[:,:,y:y+samples_from.shape[2],x:x+samples_from.shape[3]] = samples_from[:,:,:samples_to.shape[2] - y, :samples_to.shape[3] - x]
+            s[:, :, y:y + samples_from.shape[2], x:x +
+              samples_from.shape[3]] = samples_from[:, :, :samples_to.shape[2] - y, :samples_to.shape[3] - x]
         else:
-            samples_from = samples_from[:,:,:samples_to.shape[2] - y, :samples_to.shape[3] - x]
+            samples_from = samples_from[:, :, :samples_to.shape[2] - y, :samples_to.shape[3] - x]
             mask = torch.ones_like(samples_from)
             for t in range(feather):
                 if y != 0:
-                    mask[:,:,t:1+t,:] *= ((1.0/feather) * (t + 1))
+                    mask[:, :, t:1 + t, :] *= ((1.0/feather)*(t + 1))
 
                 if y + samples_from.shape[2] < samples_to.shape[2]:
-                    mask[:,:,mask.shape[2] -1 -t: mask.shape[2]-t,:] *= ((1.0/feather) * (t + 1))
+                    mask[:, :, mask.shape[2] - 1 - t:mask.shape[2] - t, :] *= ((1.0/feather)*(t + 1))
                 if x != 0:
-                    mask[:,:,:,t:1+t] *= ((1.0/feather) * (t + 1))
+                    mask[:, :, :, t:1 + t] *= ((1.0/feather)*(t + 1))
                 if x + samples_from.shape[3] < samples_to.shape[3]:
-                    mask[:,:,:,mask.shape[3]- 1 - t: mask.shape[3]- t] *= ((1.0/feather) * (t + 1))
+                    mask[:, :, :, mask.shape[3] - 1 - t:mask.shape[3] - t] *= ((1.0/feather)*(t + 1))
             rev_mask = torch.ones_like(mask) - mask
-            s[:,:,y:y+samples_from.shape[2],x:x+samples_from.shape[3]] = samples_from[:,:,:samples_to.shape[2] - y, :samples_to.shape[3] - x] * mask + s[:,:,y:y+samples_from.shape[2],x:x+samples_from.shape[3]] * rev_mask
+            s[:, :, y:y + samples_from.shape[2], x:x +
+              samples_from.shape[3]] = samples_from[:, :, :samples_to.shape[2] - y, :samples_to.shape[3] -
+                                                    x]*mask + s[:, :, y:y + samples_from.shape[2],
+                                                                x:x + samples_from.shape[3]]*rev_mask
         samples_out["samples"] = s
-        return (samples_out,)
+        return (samples_out, )
+
 
 class LatentBlend:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {
-            "samples1": ("LATENT",),
-            "samples2": ("LATENT",),
-            "blend_factor": ("FLOAT", {
-                "default": 0.5,
-                "min": 0,
-                "max": 1,
-                "step": 0.01
-            }),
-        }}
+        return {
+            "required": {
+                "samples1": ("LATENT", ),
+                "samples2": ("LATENT", ),
+                "blend_factor": ("FLOAT", {
+                    "default": 0.5,
+                    "min": 0,
+                    "max": 1,
+                    "step": 0.01
+                }),
+            }
+        }
 
-    RETURN_TYPES = ("LATENT",)
+    RETURN_TYPES = ("LATENT", )
     FUNCTION = "blend"
 
     CATEGORY = "_for_testing"
 
-    def blend(self, samples1, samples2, blend_factor:float, blend_mode: str="normal"):
+    def blend(self, samples1, samples2, blend_factor: float, blend_mode: str = "normal"):
 
         samples_out = samples1.copy()
         samples1 = samples1["samples"]
@@ -1189,13 +1652,14 @@ class LatentBlend:
 
         if samples1.shape != samples2.shape:
             samples2.permute(0, 3, 1, 2)
-            samples2 = comfy.utils.common_upscale(samples2, samples1.shape[3], samples1.shape[2], 'bicubic', crop='center')
+            samples2 = comfy.utils.common_upscale(samples2, samples1.shape[3], samples1.shape[2], 'bicubic',
+                                                  crop='center')
             samples2.permute(0, 2, 3, 1)
 
         samples_blended = self.blend_mode(samples1, samples2, blend_mode)
-        samples_blended = samples1 * blend_factor + samples_blended * (1 - blend_factor)
+        samples_blended = samples1*blend_factor + samples_blended*(1 - blend_factor)
         samples_out["samples"] = samples_blended
-        return (samples_out,)
+        return (samples_out, )
 
     def blend_mode(self, img1, img2, mode):
         if mode == "normal":
@@ -1203,16 +1667,41 @@ class LatentBlend:
         else:
             raise ValueError(f"Unsupported blend mode: {mode}")
 
+
 class LatentCrop:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "samples": ("LATENT",),
-                              "width": ("INT", {"default": 512, "min": 64, "max": MAX_RESOLUTION, "step": 8}),
-                              "height": ("INT", {"default": 512, "min": 64, "max": MAX_RESOLUTION, "step": 8}),
-                              "x": ("INT", {"default": 0, "min": 0, "max": MAX_RESOLUTION, "step": 8}),
-                              "y": ("INT", {"default": 0, "min": 0, "max": MAX_RESOLUTION, "step": 8}),
-                              }}
-    RETURN_TYPES = ("LATENT",)
+        return {
+            "required": {
+                "samples": ("LATENT", ),
+                "width": ("INT", {
+                    "default": 512,
+                    "min": 64,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "height": ("INT", {
+                    "default": 512,
+                    "min": 64,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "x": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "y": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("LATENT", )
     FUNCTION = "crop"
 
     CATEGORY = "latent/transform"
@@ -1220,8 +1709,8 @@ class LatentCrop:
     def crop(self, samples, width, height, x, y):
         s = samples.copy()
         samples = samples['samples']
-        x =  x // 8
-        y = y // 8
+        x = x//8
+        y = y//8
 
         #enfonce minimum size of 64
         if x > (samples.shape[3] - 8):
@@ -1229,20 +1718,25 @@ class LatentCrop:
         if y > (samples.shape[2] - 8):
             y = samples.shape[2] - 8
 
-        new_height = height // 8
-        new_width = width // 8
+        new_height = height//8
+        new_width = width//8
         to_x = new_width + x
         to_y = new_height + y
-        s['samples'] = samples[:,:,y:to_y, x:to_x]
-        return (s,)
+        s['samples'] = samples[:, :, y:to_y, x:to_x]
+        return (s, )
+
 
 class SetLatentNoiseMask:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "samples": ("LATENT",),
-                              "mask": ("MASK",),
-                              }}
-    RETURN_TYPES = ("LATENT",)
+        return {
+            "required": {
+                "samples": ("LATENT", ),
+                "mask": ("MASK", ),
+            }
+        }
+
+    RETURN_TYPES = ("LATENT", )
     FUNCTION = "set_mask"
 
     CATEGORY = "latent/inpaint"
@@ -1250,12 +1744,15 @@ class SetLatentNoiseMask:
     def set_mask(self, samples, mask):
         s = samples.copy()
         s["noise_mask"] = mask.reshape((-1, 1, mask.shape[-2], mask.shape[-1]))
-        return (s,)
+        return (s, )
 
-def common_ksampler(model, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent, denoise=1.0, disable_noise=False, start_step=None, last_step=None, force_full_denoise=False):
+
+def common_ksampler(model, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent, denoise=1.0,
+                    disable_noise=False, start_step=None, last_step=None, force_full_denoise=False):
     latent_image = latent["samples"]
     if disable_noise:
-        noise = torch.zeros(latent_image.size(), dtype=latent_image.dtype, layout=latent_image.layout, device="cpu")
+        noise = torch.zeros(latent_image.size(), dtype=latent_image.dtype, layout=latent_image.layout,
+                            device="cpu")
     else:
         batch_inds = latent["batch_index"] if "batch_index" in latent else None
         noise = comfy.sample.prepare_noise(latent_image, seed, batch_inds)
@@ -1266,71 +1763,125 @@ def common_ksampler(model, seed, steps, cfg, sampler_name, scheduler, positive, 
 
     callback = latent_preview.prepare_callback(model, steps)
     disable_pbar = not comfy.utils.PROGRESS_BAR_ENABLED
-    samples = comfy.sample.sample(model, noise, steps, cfg, sampler_name, scheduler, positive, negative, latent_image,
-                                  denoise=denoise, disable_noise=disable_noise, start_step=start_step, last_step=last_step,
-                                  force_full_denoise=force_full_denoise, noise_mask=noise_mask, callback=callback, disable_pbar=disable_pbar, seed=seed)
+    samples = comfy.sample.sample(model, noise, steps, cfg, sampler_name, scheduler, positive, negative,
+                                  latent_image, denoise=denoise, disable_noise=disable_noise,
+                                  start_step=start_step, last_step=last_step,
+                                  force_full_denoise=force_full_denoise, noise_mask=noise_mask,
+                                  callback=callback, disable_pbar=disable_pbar, seed=seed)
     out = latent.copy()
     out["samples"] = samples
     return (out, )
 
+
 class KSampler:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required":
-                    {"model": ("MODEL",),
-                    "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
-                    "steps": ("INT", {"default": 20, "min": 1, "max": 10000}),
-                    "cfg": ("FLOAT", {"default": 8.0, "min": 0.0, "max": 100.0, "step":0.1, "round": 0.01}),
-                    "sampler_name": (comfy.samplers.KSampler.SAMPLERS, ),
-                    "scheduler": (comfy.samplers.KSampler.SCHEDULERS, ),
-                    "positive": ("CONDITIONING", ),
-                    "negative": ("CONDITIONING", ),
-                    "latent_image": ("LATENT", ),
-                    "denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-                     }
-                }
+        return {
+            "required": {
+                "model": ("MODEL", ),
+                "seed": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 0xffffffffffffffff
+                }),
+                "steps": ("INT", {
+                    "default": 20,
+                    "min": 1,
+                    "max": 10000
+                }),
+                "cfg": ("FLOAT", {
+                    "default": 8.0,
+                    "min": 0.0,
+                    "max": 100.0,
+                    "step": 0.1,
+                    "round": 0.01
+                }),
+                "sampler_name": (comfy.samplers.KSampler.SAMPLERS, ),
+                "scheduler": (comfy.samplers.KSampler.SCHEDULERS, ),
+                "positive": ("CONDITIONING", ),
+                "negative": ("CONDITIONING", ),
+                "latent_image": ("LATENT", ),
+                "denoise": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.01
+                }),
+            }
+        }
 
-    RETURN_TYPES = ("LATENT",)
+    RETURN_TYPES = ("LATENT", )
     FUNCTION = "sample"
 
     CATEGORY = "sampling"
 
-    def sample(self, model, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent_image, denoise=1.0):
-        return common_ksampler(model, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent_image, denoise=denoise)
+    def sample(self, model, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent_image,
+               denoise=1.0):
+        return common_ksampler(model, seed, steps, cfg, sampler_name, scheduler, positive, negative,
+                               latent_image, denoise=denoise)
+
 
 class KSamplerAdvanced:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required":
-                    {"model": ("MODEL",),
-                    "add_noise": (["enable", "disable"], ),
-                    "noise_seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
-                    "steps": ("INT", {"default": 20, "min": 1, "max": 10000}),
-                    "cfg": ("FLOAT", {"default": 8.0, "min": 0.0, "max": 100.0, "step":0.1, "round": 0.01}),
-                    "sampler_name": (comfy.samplers.KSampler.SAMPLERS, ),
-                    "scheduler": (comfy.samplers.KSampler.SCHEDULERS, ),
-                    "positive": ("CONDITIONING", ),
-                    "negative": ("CONDITIONING", ),
-                    "latent_image": ("LATENT", ),
-                    "start_at_step": ("INT", {"default": 0, "min": 0, "max": 10000}),
-                    "end_at_step": ("INT", {"default": 10000, "min": 0, "max": 10000}),
-                    "return_with_leftover_noise": (["disable", "enable"], ),
-                     }
-                }
+        return {
+            "required": {
+                "model": ("MODEL", ),
+                "add_noise": (["enable", "disable"], ),
+                "noise_seed": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 0xffffffffffffffff
+                }),
+                "steps": ("INT", {
+                    "default": 20,
+                    "min": 1,
+                    "max": 10000
+                }),
+                "cfg": ("FLOAT", {
+                    "default": 8.0,
+                    "min": 0.0,
+                    "max": 100.0,
+                    "step": 0.1,
+                    "round": 0.01
+                }),
+                "sampler_name": (comfy.samplers.KSampler.SAMPLERS, ),
+                "scheduler": (comfy.samplers.KSampler.SCHEDULERS, ),
+                "positive": ("CONDITIONING", ),
+                "negative": ("CONDITIONING", ),
+                "latent_image": ("LATENT", ),
+                "start_at_step": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 10000
+                }),
+                "end_at_step": ("INT", {
+                    "default": 10000,
+                    "min": 0,
+                    "max": 10000
+                }),
+                "return_with_leftover_noise": (["disable", "enable"], ),
+            }
+        }
 
-    RETURN_TYPES = ("LATENT",)
+    RETURN_TYPES = ("LATENT", )
     FUNCTION = "sample"
 
     CATEGORY = "sampling"
 
-    def sample(self, model, add_noise, noise_seed, steps, cfg, sampler_name, scheduler, positive, negative, latent_image, start_at_step, end_at_step, return_with_leftover_noise, denoise=1.0):
+    def sample(self, model, add_noise, noise_seed, steps, cfg, sampler_name, scheduler, positive, negative,
+               latent_image, start_at_step, end_at_step, return_with_leftover_noise, denoise=1.0):
         force_full_denoise = True
         if return_with_leftover_noise == "enable":
             force_full_denoise = False
         disable_noise = False
         if add_noise == "disable":
             disable_noise = True
-        return common_ksampler(model, noise_seed, steps, cfg, sampler_name, scheduler, positive, negative, latent_image, denoise=denoise, disable_noise=disable_noise, start_step=start_at_step, last_step=end_at_step, force_full_denoise=force_full_denoise)
+        return common_ksampler(model, noise_seed, steps, cfg, sampler_name, scheduler, positive, negative,
+                               latent_image, denoise=denoise, disable_noise=disable_noise,
+                               start_step=start_at_step, last_step=end_at_step,
+                               force_full_denoise=force_full_denoise)
+
 
 class SaveImage:
     def __init__(self):
@@ -1341,11 +1892,18 @@ class SaveImage:
 
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": 
-                    {"images": ("IMAGE", ),
-                     "filename_prefix": ("STRING", {"default": "ComfyUI"})},
-                "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
-                }
+        return {
+            "required": {
+                "images": ("IMAGE", ),
+                "filename_prefix": ("STRING", {
+                    "default": "ComfyUI"
+                })
+            },
+            "hidden": {
+                "prompt": "PROMPT",
+                "extra_pnginfo": "EXTRA_PNGINFO"
+            },
+        }
 
     RETURN_TYPES = ()
     FUNCTION = "save_images"
@@ -1356,10 +1914,11 @@ class SaveImage:
 
     def save_images(self, images, filename_prefix="ComfyUI", prompt=None, extra_pnginfo=None):
         filename_prefix += self.prefix_append
-        full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(filename_prefix, self.output_dir, images[0].shape[1], images[0].shape[0])
+        full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(
+            filename_prefix, self.output_dir, images[0].shape[1], images[0].shape[0])
         results = list()
         for image in images:
-            i = 255. * image.cpu().numpy()
+            i = 255.*image.cpu().numpy()
             img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
             metadata = None
             if not args.disable_metadata:
@@ -1371,15 +1930,13 @@ class SaveImage:
                         metadata.add_text(x, json.dumps(extra_pnginfo[x]))
 
             file = f"{filename}_{counter:05}_.png"
-            img.save(os.path.join(full_output_folder, file), pnginfo=metadata, compress_level=self.compress_level)
-            results.append({
-                "filename": file,
-                "subfolder": subfolder,
-                "type": self.type
-            })
+            img.save(os.path.join(full_output_folder, file), pnginfo=metadata,
+                     compress_level=self.compress_level)
+            results.append({"filename": file, "subfolder": subfolder, "type": self.type})
             counter += 1
 
-        return { "ui": { "images": results } }
+        return {"ui": {"images": results}}
+
 
 class PreviewImage(SaveImage):
     def __init__(self):
@@ -1390,24 +1947,35 @@ class PreviewImage(SaveImage):
 
     @classmethod
     def INPUT_TYPES(s):
-        return {"required":
-                    {"images": ("IMAGE", ), },
-                "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
-                }
+        return {
+            "required": {
+                "images": ("IMAGE", ),
+            },
+            "hidden": {
+                "prompt": "PROMPT",
+                "extra_pnginfo": "EXTRA_PNGINFO"
+            },
+        }
+
 
 class LoadImage:
     @classmethod
     def INPUT_TYPES(s):
         input_dir = folder_paths.get_input_directory()
         files = [f for f in os.listdir(input_dir) if os.path.isfile(os.path.join(input_dir, f))]
-        return {"required":
-                    {"image": (sorted(files), {"image_upload": True})},
-                }
+        return {
+            "required": {
+                "image": (sorted(files), {
+                    "image_upload": True
+                })
+            },
+        }
 
     CATEGORY = "image"
 
     RETURN_TYPES = ("IMAGE", "MASK")
     FUNCTION = "load_image"
+
     def load_image(self, image):
         image_path = folder_paths.get_annotated_filepath(image)
         img = Image.open(image_path)
@@ -1416,13 +1984,13 @@ class LoadImage:
         for i in ImageSequence.Iterator(img):
             i = ImageOps.exif_transpose(i)
             image = i.convert("RGB")
-            image = np.array(image).astype(np.float32) / 255.0
-            image = torch.from_numpy(image)[None,]
+            image = np.array(image).astype(np.float32)/255.0
+            image = torch.from_numpy(image)[None, ]
             if 'A' in i.getbands():
-                mask = np.array(i.getchannel('A')).astype(np.float32) / 255.0
+                mask = np.array(i.getchannel('A')).astype(np.float32)/255.0
                 mask = 1. - torch.from_numpy(mask)
             else:
-                mask = torch.zeros((64,64), dtype=torch.float32, device="cpu")
+                mask = torch.zeros((64, 64), dtype=torch.float32, device="cpu")
             output_images.append(image)
             output_masks.append(mask.unsqueeze(0))
 
@@ -1450,21 +2018,28 @@ class LoadImage:
 
         return True
 
+
 class LoadImageMask:
     _color_channels = ["alpha", "red", "green", "blue"]
+
     @classmethod
     def INPUT_TYPES(s):
         input_dir = folder_paths.get_input_directory()
         files = [f for f in os.listdir(input_dir) if os.path.isfile(os.path.join(input_dir, f))]
-        return {"required":
-                    {"image": (sorted(files), {"image_upload": True}),
-                     "channel": (s._color_channels, ), }
-                }
+        return {
+            "required": {
+                "image": (sorted(files), {
+                    "image_upload": True
+                }),
+                "channel": (s._color_channels, ),
+            }
+        }
 
     CATEGORY = "mask"
 
-    RETURN_TYPES = ("MASK",)
+    RETURN_TYPES = ("MASK", )
     FUNCTION = "load_image"
+
     def load_image(self, image, channel):
         image_path = folder_paths.get_annotated_filepath(image)
         i = Image.open(image_path)
@@ -1474,13 +2049,13 @@ class LoadImageMask:
         mask = None
         c = channel[0].upper()
         if c in i.getbands():
-            mask = np.array(i.getchannel(c)).astype(np.float32) / 255.0
+            mask = np.array(i.getchannel(c)).astype(np.float32)/255.0
             mask = torch.from_numpy(mask)
             if c == 'A':
                 mask = 1. - mask
         else:
-            mask = torch.zeros((64,64), dtype=torch.float32, device="cpu")
-        return (mask.unsqueeze(0),)
+            mask = torch.zeros((64, 64), dtype=torch.float32, device="cpu")
+        return (mask.unsqueeze(0), )
 
     @classmethod
     def IS_CHANGED(s, image, channel):
@@ -1500,17 +2075,34 @@ class LoadImageMask:
 
         return True
 
+
 class ImageScale:
     upscale_methods = ["nearest-exact", "bilinear", "area", "bicubic", "lanczos"]
     crop_methods = ["disabled", "center"]
 
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "image": ("IMAGE",), "upscale_method": (s.upscale_methods,),
-                              "width": ("INT", {"default": 512, "min": 0, "max": MAX_RESOLUTION, "step": 1}),
-                              "height": ("INT", {"default": 512, "min": 0, "max": MAX_RESOLUTION, "step": 1}),
-                              "crop": (s.crop_methods,)}}
-    RETURN_TYPES = ("IMAGE",)
+        return {
+            "required": {
+                "image": ("IMAGE", ),
+                "upscale_method": (s.upscale_methods, ),
+                "width": ("INT", {
+                    "default": 512,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 1
+                }),
+                "height": ("INT", {
+                    "default": 512,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 1
+                }),
+                "crop": (s.crop_methods, )
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", )
     FUNCTION = "upscale"
 
     CATEGORY = "image/upscaling"
@@ -1519,68 +2111,82 @@ class ImageScale:
         if width == 0 and height == 0:
             s = image
         else:
-            samples = image.movedim(-1,1)
+            samples = image.movedim(-1, 1)
 
             if width == 0:
-                width = max(1, round(samples.shape[3] * height / samples.shape[2]))
+                width = max(1, round(samples.shape[3]*height/samples.shape[2]))
             elif height == 0:
-                height = max(1, round(samples.shape[2] * width / samples.shape[3]))
+                height = max(1, round(samples.shape[2]*width/samples.shape[3]))
 
             s = comfy.utils.common_upscale(samples, width, height, upscale_method, crop)
-            s = s.movedim(1,-1)
-        return (s,)
+            s = s.movedim(1, -1)
+        return (s, )
+
 
 class ImageScaleBy:
     upscale_methods = ["nearest-exact", "bilinear", "area", "bicubic", "lanczos"]
 
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "image": ("IMAGE",), "upscale_method": (s.upscale_methods,),
-                              "scale_by": ("FLOAT", {"default": 1.0, "min": 0.01, "max": 8.0, "step": 0.01}),}}
-    RETURN_TYPES = ("IMAGE",)
+        return {
+            "required": {
+                "image": ("IMAGE", ),
+                "upscale_method": (s.upscale_methods, ),
+                "scale_by": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.01,
+                    "max": 8.0,
+                    "step": 0.01
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", )
     FUNCTION = "upscale"
 
     CATEGORY = "image/upscaling"
 
     def upscale(self, image, upscale_method, scale_by):
-        samples = image.movedim(-1,1)
-        width = round(samples.shape[3] * scale_by)
-        height = round(samples.shape[2] * scale_by)
+        samples = image.movedim(-1, 1)
+        width = round(samples.shape[3]*scale_by)
+        height = round(samples.shape[2]*scale_by)
         s = comfy.utils.common_upscale(samples, width, height, upscale_method, "disabled")
-        s = s.movedim(1,-1)
-        return (s,)
+        s = s.movedim(1, -1)
+        return (s, )
+
 
 class ImageInvert:
-
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "image": ("IMAGE",)}}
+        return {"required": {"image": ("IMAGE", )}}
 
-    RETURN_TYPES = ("IMAGE",)
+    RETURN_TYPES = ("IMAGE", )
     FUNCTION = "invert"
 
     CATEGORY = "image"
 
     def invert(self, image):
         s = 1.0 - image
-        return (s,)
+        return (s, )
+
 
 class ImageBatch:
-
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "image1": ("IMAGE",), "image2": ("IMAGE",)}}
+        return {"required": {"image1": ("IMAGE", ), "image2": ("IMAGE", )}}
 
-    RETURN_TYPES = ("IMAGE",)
+    RETURN_TYPES = ("IMAGE", )
     FUNCTION = "batch"
 
     CATEGORY = "image"
 
     def batch(self, image1, image2):
         if image1.shape[1:] != image2.shape[1:]:
-            image2 = comfy.utils.common_upscale(image2.movedim(-1,1), image1.shape[2], image1.shape[1], "bilinear", "center").movedim(1,-1)
+            image2 = comfy.utils.common_upscale(image2.movedim(-1, 1), image1.shape[2], image1.shape[1],
+                                                "bilinear", "center").movedim(1, -1)
         s = torch.cat((image1, image2), dim=0)
-        return (s,)
+        return (s, )
+
 
 class EmptyImage:
     def __init__(self, device="cpu"):
@@ -1588,34 +2194,83 @@ class EmptyImage:
 
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "width": ("INT", {"default": 512, "min": 1, "max": MAX_RESOLUTION, "step": 1}),
-                              "height": ("INT", {"default": 512, "min": 1, "max": MAX_RESOLUTION, "step": 1}),
-                              "batch_size": ("INT", {"default": 1, "min": 1, "max": 4096}),
-                              "color": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFF, "step": 1, "display": "color"}),
-                              }}
-    RETURN_TYPES = ("IMAGE",)
+        return {
+            "required": {
+                "width": ("INT", {
+                    "default": 512,
+                    "min": 1,
+                    "max": MAX_RESOLUTION,
+                    "step": 1
+                }),
+                "height": ("INT", {
+                    "default": 512,
+                    "min": 1,
+                    "max": MAX_RESOLUTION,
+                    "step": 1
+                }),
+                "batch_size": ("INT", {
+                    "default": 1,
+                    "min": 1,
+                    "max": 4096
+                }),
+                "color": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 0xFFFFFF,
+                    "step": 1,
+                    "display": "color"
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", )
     FUNCTION = "generate"
 
     CATEGORY = "image"
 
     def generate(self, width, height, batch_size=1, color=0):
-        r = torch.full([batch_size, height, width, 1], ((color >> 16) & 0xFF) / 0xFF)
-        g = torch.full([batch_size, height, width, 1], ((color >> 8) & 0xFF) / 0xFF)
-        b = torch.full([batch_size, height, width, 1], ((color) & 0xFF) / 0xFF)
+        r = torch.full([batch_size, height, width, 1], ((color >> 16) & 0xFF)/0xFF)
+        g = torch.full([batch_size, height, width, 1], ((color >> 8) & 0xFF)/0xFF)
+        b = torch.full([batch_size, height, width, 1], ((color) & 0xFF)/0xFF)
         return (torch.cat((r, g, b), dim=-1), )
 
-class ImagePadForOutpaint:
 
+class ImagePadForOutpaint:
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                "image": ("IMAGE",),
-                "left": ("INT", {"default": 0, "min": 0, "max": MAX_RESOLUTION, "step": 8}),
-                "top": ("INT", {"default": 0, "min": 0, "max": MAX_RESOLUTION, "step": 8}),
-                "right": ("INT", {"default": 0, "min": 0, "max": MAX_RESOLUTION, "step": 8}),
-                "bottom": ("INT", {"default": 0, "min": 0, "max": MAX_RESOLUTION, "step": 8}),
-                "feathering": ("INT", {"default": 40, "min": 0, "max": MAX_RESOLUTION, "step": 1}),
+                "image": ("IMAGE", ),
+                "left": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "top": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "right": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "bottom": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 8
+                }),
+                "feathering": ("INT", {
+                    "default": 40,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 1
+                }),
             }
         }
 
@@ -1638,12 +2293,9 @@ class ImagePadForOutpaint:
             dtype=torch.float32,
         )
 
-        t = torch.zeros(
-            (d2, d3),
-            dtype=torch.float32
-        )
+        t = torch.zeros((d2, d3), dtype=torch.float32)
 
-        if feathering > 0 and feathering * 2 < d2 and feathering * 2 < d3:
+        if feathering > 0 and feathering*2 < d2 and feathering*2 < d3:
 
             for i in range(d2):
                 for j in range(d3):
@@ -1658,9 +2310,9 @@ class ImagePadForOutpaint:
                     if d >= feathering:
                         continue
 
-                    v = (feathering - d) / feathering
+                    v = (feathering - d)/feathering
 
-                    t[i, j] = v * v
+                    t[i, j] = v*v
 
         mask[top:top + d2, left:left + d3] = t
 
@@ -1691,7 +2343,7 @@ NODE_CLASS_MAPPINGS = {
     "ImageBatch": ImageBatch,
     "ImagePadForOutpaint": ImagePadForOutpaint,
     "EmptyImage": EmptyImage,
-    "ConditioningAverage": ConditioningAverage ,
+    "ConditioningAverage": ConditioningAverage,
     "ConditioningCombine": ConditioningCombine,
     "ConditioningConcat": ConditioningConcat,
     "ConditioningSetArea": ConditioningSetArea,
@@ -1722,13 +2374,10 @@ NODE_CLASS_MAPPINGS = {
     "unCLIPCheckpointLoader": unCLIPCheckpointLoader,
     "GLIGENLoader": GLIGENLoader,
     "GLIGENTextBoxApply": GLIGENTextBoxApply,
-
     "CheckpointLoader": CheckpointLoader,
     "DiffusersLoader": DiffusersLoader,
-
     "LoadLatent": LoadLatent,
     "SaveLatent": SaveLatent,
-
     "ConditioningZeroOut": ConditioningZeroOut,
     "ConditioningSetTimestepRange": ConditioningSetTimestepRange,
     "LoraLoaderModelOnly": LoraLoaderModelOnly,
@@ -1775,7 +2424,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LatentUpscaleBy": "Upscale Latent By",
     "LatentComposite": "Latent Composite",
     "LatentBlend": "Latent Blend",
-    "LatentFromBatch" : "Latent From Batch",
+    "LatentFromBatch": "Latent From Batch",
     "RepeatLatentBatch": "Repeat Latent Batch",
     # Image
     "SaveImage": "Save Image",
@@ -1795,6 +2444,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 
 EXTENSION_WEB_DIRS = {}
 
+
 def load_custom_node(module_path, ignore=set()):
     module_name = os.path.basename(module_path)
     if os.path.isfile(module_path):
@@ -1805,7 +2455,8 @@ def load_custom_node(module_path, ignore=set()):
             module_spec = importlib.util.spec_from_file_location(module_name, module_path)
             module_dir = os.path.split(module_path)[0]
         else:
-            module_spec = importlib.util.spec_from_file_location(module_name, os.path.join(module_path, "__init__.py"))
+            module_spec = importlib.util.spec_from_file_location(module_name,
+                                                                 os.path.join(module_path, "__init__.py"))
             module_dir = module_path
 
         module = importlib.util.module_from_spec(module_spec)
@@ -1821,7 +2472,8 @@ def load_custom_node(module_path, ignore=set()):
             for name in module.NODE_CLASS_MAPPINGS:
                 if name not in ignore:
                     NODE_CLASS_MAPPINGS[name] = module.NODE_CLASS_MAPPINGS[name]
-            if hasattr(module, "NODE_DISPLAY_NAME_MAPPINGS") and getattr(module, "NODE_DISPLAY_NAME_MAPPINGS") is not None:
+            if hasattr(module, "NODE_DISPLAY_NAME_MAPPINGS") and getattr(
+                    module, "NODE_DISPLAY_NAME_MAPPINGS") is not None:
                 NODE_DISPLAY_NAME_MAPPINGS.update(module.NODE_DISPLAY_NAME_MAPPINGS)
             return True
         else:
@@ -1831,6 +2483,7 @@ def load_custom_node(module_path, ignore=set()):
         print(traceback.format_exc())
         print(f"Cannot import {module_path} module for custom nodes:", e)
         return False
+
 
 def load_custom_nodes():
     base_node_names = set(NODE_CLASS_MAPPINGS.keys())
@@ -1858,6 +2511,7 @@ def load_custom_nodes():
                 import_message = " (IMPORT FAILED)"
             print("{:6.1f} seconds{}:".format(n[0], import_message), n[1])
         print()
+
 
 def init_custom_nodes():
     extras_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "comfy_extras")

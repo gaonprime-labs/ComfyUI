@@ -34,24 +34,17 @@ def drop_block_2d(
     runs with success, but needs further validation and possibly optimization for lower runtime impact.
     """
     _, C, H, W = x.shape
-    total_size = W * H
+    total_size = W*H
     clipped_block_size = min(block_size, min(W, H))
     # seed_drop_rate, the gamma parameter
-    gamma = (
-        gamma_scale
-        * drop_prob
-        * total_size
-        / clipped_block_size**2
-        / ((W - block_size + 1) * (H - block_size + 1))
-    )
+    gamma = (gamma_scale*drop_prob*total_size/clipped_block_size**2/((W - block_size + 1)*
+                                                                     (H - block_size + 1)))
 
     # Forces the block to be inside the feature map.
-    w_i, h_i = torch.meshgrid(
-        torch.arange(W).to(x.device), torch.arange(H).to(x.device)
-    )
-    valid_block = (
-        (w_i >= clipped_block_size // 2) & (w_i < W - (clipped_block_size - 1) // 2)
-    ) & ((h_i >= clipped_block_size // 2) & (h_i < H - (clipped_block_size - 1) // 2))
+    w_i, h_i = torch.meshgrid(torch.arange(W).to(x.device), torch.arange(H).to(x.device))
+    valid_block = ((w_i >= clipped_block_size//2) &
+                   (w_i < W - (clipped_block_size - 1)//2)) & ((h_i >= clipped_block_size//2) &
+                                                               (h_i < H - (clipped_block_size - 1)//2))
     valid_block = torch.reshape(valid_block, (1, 1, H, W)).to(dtype=x.dtype)
 
     if batchwise:
@@ -64,27 +57,22 @@ def drop_block_2d(
         -block_mask,
         kernel_size=clipped_block_size,  # block_size,
         stride=1,
-        padding=clipped_block_size // 2,
+        padding=clipped_block_size//2,
     )
 
     if with_noise:
-        normal_noise = (
-            torch.randn((1, C, H, W), dtype=x.dtype, device=x.device)
-            if batchwise
-            else torch.randn_like(x)
-        )
+        normal_noise = (torch.randn(
+            (1, C, H, W), dtype=x.dtype, device=x.device) if batchwise else torch.randn_like(x))
         if inplace:
-            x.mul_(block_mask).add_(normal_noise * (1 - block_mask))
+            x.mul_(block_mask).add_(normal_noise*(1 - block_mask))
         else:
-            x = x * block_mask + normal_noise * (1 - block_mask)
+            x = x*block_mask + normal_noise*(1 - block_mask)
     else:
-        normalize_scale = (
-            block_mask.numel() / block_mask.to(dtype=torch.float32).sum().add(1e-7)
-        ).to(x.dtype)
+        normalize_scale = (block_mask.numel()/block_mask.to(dtype=torch.float32).sum().add(1e-7)).to(x.dtype)
         if inplace:
-            x.mul_(block_mask * normalize_scale)
+            x.mul_(block_mask*normalize_scale)
         else:
-            x = x * block_mask * normalize_scale
+            x = x*block_mask*normalize_scale
     return x
 
 
@@ -102,45 +90,38 @@ def drop_block_fast_2d(
     block mask at edges.
     """
     _, _, H, W = x.shape
-    total_size = W * H
+    total_size = W*H
     clipped_block_size = min(block_size, min(W, H))
-    gamma = (
-        gamma_scale
-        * drop_prob
-        * total_size
-        / clipped_block_size**2
-        / ((W - block_size + 1) * (H - block_size + 1))
-    )
+    gamma = (gamma_scale*drop_prob*total_size/clipped_block_size**2/((W - block_size + 1)*
+                                                                     (H - block_size + 1)))
 
     block_mask = torch.empty_like(x).bernoulli_(gamma)
     block_mask = F.max_pool2d(
         block_mask.to(x.dtype),
         kernel_size=clipped_block_size,
         stride=1,
-        padding=clipped_block_size // 2,
+        padding=clipped_block_size//2,
     )
 
     if with_noise:
         normal_noise = torch.empty_like(x).normal_()
         if inplace:
-            x.mul_(1.0 - block_mask).add_(normal_noise * block_mask)
+            x.mul_(1.0 - block_mask).add_(normal_noise*block_mask)
         else:
-            x = x * (1.0 - block_mask) + normal_noise * block_mask
+            x = x*(1.0 - block_mask) + normal_noise*block_mask
     else:
         block_mask = 1 - block_mask
-        normalize_scale = (
-            block_mask.numel() / block_mask.to(dtype=torch.float32).sum().add(1e-6)
-        ).to(dtype=x.dtype)
+        normalize_scale = (block_mask.numel()/
+                           block_mask.to(dtype=torch.float32).sum().add(1e-6)).to(dtype=x.dtype)
         if inplace:
-            x.mul_(block_mask * normalize_scale)
+            x.mul_(block_mask*normalize_scale)
         else:
-            x = x * block_mask * normalize_scale
+            x = x*block_mask*normalize_scale
     return x
 
 
 class DropBlock2d(nn.Module):
     """DropBlock. See https://arxiv.org/pdf/1810.12890.pdf"""
-
     def __init__(
         self,
         drop_prob: float = 0.1,
@@ -184,9 +165,7 @@ class DropBlock2d(nn.Module):
             )
 
 
-def drop_path(
-    x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: bool = True
-):
+def drop_path(x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: bool = True):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
     This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
@@ -199,18 +178,15 @@ def drop_path(
     if drop_prob == 0.0 or not training:
         return x
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (
-        x.ndim - 1
-    )  # work with diff dim tensors, not just 2D ConvNets
+    shape = (x.shape[0], ) + (1, )*(x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
     random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
     if keep_prob > 0.0 and scale_by_keep:
         random_tensor.div_(keep_prob)
-    return x * random_tensor
+    return x*random_tensor
 
 
 class DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks)."""
-
     def __init__(self, drop_prob: float = 0.0, scale_by_keep: bool = True):
         super(DropPath, self).__init__()
         self.drop_prob = drop_prob

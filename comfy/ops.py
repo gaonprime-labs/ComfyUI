@@ -2,6 +2,7 @@ import torch
 from contextlib import contextmanager
 import comfy.model_management
 
+
 def cast_bias_weight(s, input):
     bias = None
     non_blocking = comfy.model_management.device_supports_non_blocking(input.device)
@@ -14,6 +15,7 @@ def cast_bias_weight(s, input):
 class disable_weight_init:
     class Linear(torch.nn.Linear):
         comfy_cast_weights = False
+
         def reset_parameters(self):
             return None
 
@@ -29,6 +31,7 @@ class disable_weight_init:
 
     class Conv2d(torch.nn.Conv2d):
         comfy_cast_weights = False
+
         def reset_parameters(self):
             return None
 
@@ -44,6 +47,7 @@ class disable_weight_init:
 
     class Conv3d(torch.nn.Conv3d):
         comfy_cast_weights = False
+
         def reset_parameters(self):
             return None
 
@@ -59,6 +63,7 @@ class disable_weight_init:
 
     class GroupNorm(torch.nn.GroupNorm):
         comfy_cast_weights = False
+
         def reset_parameters(self):
             return None
 
@@ -72,9 +77,9 @@ class disable_weight_init:
             else:
                 return super().forward(*args, **kwargs)
 
-
     class LayerNorm(torch.nn.LayerNorm):
         comfy_cast_weights = False
+
         def reset_parameters(self):
             return None
 

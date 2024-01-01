@@ -10,7 +10,6 @@
 # Copyright (c) 2020 Shanghai Jiao Tong University
 #############################################################
 
-
 import torch.nn as nn
 
 from .esa import ESA
@@ -51,7 +50,7 @@ class OSAG(nn.Module):
             group_list.append(temp_res)
         group_list.append(nn.Conv2d(channel_num, channel_num, 1, 1, 0, bias=bias))
         self.residual_layer = nn.Sequential(*group_list)
-        esa_channel = max(channel_num // 4, 16)
+        esa_channel = max(channel_num//4, 16)
         self.esa = ESA(esa_channel, channel_num)
 
     def forward(self, x):

@@ -30,7 +30,7 @@ def default(val, d):
 
 
 def cast_tuple(val, length=1):
-    return val if isinstance(val, tuple) else ((val,) * length)
+    return val if isinstance(val, tuple) else ((val, )*length)
 
 
 # helper classes
@@ -59,7 +59,7 @@ class Conv_PreNormResidual(nn.Module):
 class FeedForward(nn.Module):
     def __init__(self, dim, mult=2, dropout=0.0):
         super().__init__()
-        inner_dim = int(dim * mult)
+        inner_dim = int(dim*mult)
         self.net = nn.Sequential(
             nn.Linear(dim, inner_dim),
             nn.GELU(),
@@ -75,7 +75,7 @@ class FeedForward(nn.Module):
 class Conv_FeedForward(nn.Module):
     def __init__(self, dim, mult=2, dropout=0.0):
         super().__init__()
-        inner_dim = int(dim * mult)
+        inner_dim = int(dim*mult)
         self.net = nn.Sequential(
             nn.Conv2d(dim, inner_dim, 1, 1, 0),
             nn.GELU(),
@@ -92,17 +92,17 @@ class Gated_Conv_FeedForward(nn.Module):
     def __init__(self, dim, mult=1, bias=False, dropout=0.0):
         super().__init__()
 
-        hidden_features = int(dim * mult)
+        hidden_features = int(dim*mult)
 
-        self.project_in = nn.Conv2d(dim, hidden_features * 2, kernel_size=1, bias=bias)
+        self.project_in = nn.Conv2d(dim, hidden_features*2, kernel_size=1, bias=bias)
 
         self.dwconv = nn.Conv2d(
-            hidden_features * 2,
-            hidden_features * 2,
+            hidden_features*2,
+            hidden_features*2,
             kernel_size=3,
             stride=1,
             padding=1,
-            groups=hidden_features * 2,
+            groups=hidden_features*2,
             bias=bias,
         )
 
@@ -111,7 +111,7 @@ class Gated_Conv_FeedForward(nn.Module):
     def forward(self, x):
         x = self.project_in(x)
         x1, x2 = self.dwconv(x).chunk(2, dim=1)
-        x = F.gelu(x1) * x2
+        x = F.gelu(x1)*x2
         x = self.project_out(x)
         return x
 
@@ -122,7 +122,7 @@ class Gated_Conv_FeedForward(nn.Module):
 class SqueezeExcitation(nn.Module):
     def __init__(self, dim, shrinkage_rate=0.25):
         super().__init__()
-        hidden_dim = int(dim * shrinkage_rate)
+        hidden_dim = int(dim*shrinkage_rate)
 
         self.gate = nn.Sequential(
             Reduce("b c h w -> b c", "mean"),
@@ -134,7 +134,7 @@ class SqueezeExcitation(nn.Module):
         )
 
     def forward(self, x):
-        return x * self.gate(x)
+        return x*self.gate(x)
 
 
 class MBConvResidual(nn.Module):
@@ -160,26 +160,19 @@ class Dropsample(nn.Module):
         if self.prob == 0.0 or (not self.training):
             return x
 
-        keep_mask = (
-            torch.FloatTensor((x.shape[0], 1, 1, 1), device=device).uniform_()
-            > self.prob
-        )
-        return x * keep_mask / (1 - self.prob)
+        keep_mask = (torch.FloatTensor((x.shape[0], 1, 1, 1), device=device).uniform_() > self.prob)
+        return x*keep_mask/(1 - self.prob)
 
 
-def MBConv(
-    dim_in, dim_out, *, downsample, expansion_rate=4, shrinkage_rate=0.25, dropout=0.0
-):
-    hidden_dim = int(expansion_rate * dim_out)
+def MBConv(dim_in, dim_out, *, downsample, expansion_rate=4, shrinkage_rate=0.25, dropout=0.0):
+    hidden_dim = int(expansion_rate*dim_out)
     stride = 2 if downsample else 1
 
     net = nn.Sequential(
         nn.Conv2d(dim_in, hidden_dim, 1),
         # nn.BatchNorm2d(hidden_dim),
         nn.GELU(),
-        nn.Conv2d(
-            hidden_dim, hidden_dim, 3, stride=stride, padding=1, groups=hidden_dim
-        ),
+        nn.Conv2d(hidden_dim, hidden_dim, 3, stride=stride, padding=1, groups=hidden_dim),
         # nn.BatchNorm2d(hidden_dim),
         nn.GELU(),
         SqueezeExcitation(hidden_dim, shrinkage_rate=shrinkage_rate),
@@ -204,36 +197,28 @@ class Attention(nn.Module):
         with_pe=True,
     ):
         super().__init__()
-        assert (
-            dim % dim_head
-        ) == 0, "dimension should be divisible by dimension per head"
+        assert (dim % dim_head) == 0, "dimension should be divisible by dimension per head"
 
-        self.heads = dim // dim_head
+        self.heads = dim//dim_head
         self.scale = dim_head**-0.5
         self.with_pe = with_pe
 
-        self.to_qkv = nn.Linear(dim, dim * 3, bias=False)
+        self.to_qkv = nn.Linear(dim, dim*3, bias=False)
 
         self.attend = nn.Sequential(nn.Softmax(dim=-1), nn.Dropout(dropout))
 
-        self.to_out = nn.Sequential(
-            nn.Linear(dim, dim, bias=False), nn.Dropout(dropout)
-        )
+        self.to_out = nn.Sequential(nn.Linear(dim, dim, bias=False), nn.Dropout(dropout))
 
         # relative positional bias
         if self.with_pe:
-            self.rel_pos_bias = nn.Embedding((2 * window_size - 1) ** 2, self.heads)
+            self.rel_pos_bias = nn.Embedding((2*window_size - 1)**2, self.heads)
 
             pos = torch.arange(window_size)
             grid = torch.stack(torch.meshgrid(pos, pos))
             grid = rearrange(grid, "c i j -> (i j) c")
-            rel_pos = rearrange(grid, "i ... -> i 1 ...") - rearrange(
-                grid, "j ... -> 1 j ..."
-            )
+            rel_pos = rearrange(grid, "i ... -> i 1 ...") - rearrange(grid, "j ... -> 1 j ...")
             rel_pos += window_size - 1
-            rel_pos_indices = (rel_pos * torch.tensor([2 * window_size - 1, 1])).sum(
-                dim=-1
-            )
+            rel_pos_indices = (rel_pos*torch.tensor([2*window_size - 1, 1])).sum(dim=-1)
 
             self.register_buffer("rel_pos_indices", rel_pos_indices, persistent=False)
 
@@ -258,7 +243,7 @@ class Attention(nn.Module):
 
         # scale
 
-        q = q * self.scale
+        q = q*self.scale
 
         # sim
 
@@ -279,9 +264,7 @@ class Attention(nn.Module):
 
         # merge heads
 
-        out = rearrange(
-            out, "b h (w1 w2) d -> b w1 w2 (h d)", w1=window_height, w2=window_width
-        )
+        out = rearrange(out, "b h (w1 w2) d -> b w1 w2 (h d)", w1=window_height, w2=window_width)
 
         # combine heads out
 
@@ -300,23 +283,21 @@ class Block_Attention(nn.Module):
         with_pe=True,
     ):
         super().__init__()
-        assert (
-            dim % dim_head
-        ) == 0, "dimension should be divisible by dimension per head"
+        assert (dim % dim_head) == 0, "dimension should be divisible by dimension per head"
 
-        self.heads = dim // dim_head
+        self.heads = dim//dim_head
         self.ps = window_size
         self.scale = dim_head**-0.5
         self.with_pe = with_pe
 
-        self.qkv = nn.Conv2d(dim, dim * 3, kernel_size=1, bias=bias)
+        self.qkv = nn.Conv2d(dim, dim*3, kernel_size=1, bias=bias)
         self.qkv_dwconv = nn.Conv2d(
-            dim * 3,
-            dim * 3,
+            dim*3,
+            dim*3,
             kernel_size=3,
             stride=1,
             padding=1,
-            groups=dim * 3,
+            groups=dim*3,
             bias=bias,
         )
 
@@ -346,7 +327,7 @@ class Block_Attention(nn.Module):
 
         # scale
 
-        q = q * self.scale
+        q = q*self.scale
 
         # sim
 
@@ -363,8 +344,8 @@ class Block_Attention(nn.Module):
         out = rearrange(
             out,
             "(b x y) head (w1 w2) d -> b (head d) (x w1) (y w2)",
-            x=h // self.ps,
-            y=w // self.ps,
+            x=h//self.ps,
+            y=w//self.ps,
             head=self.heads,
             w1=self.ps,
             w2=self.ps,
@@ -383,14 +364,14 @@ class Channel_Attention(nn.Module):
 
         self.ps = window_size
 
-        self.qkv = nn.Conv2d(dim, dim * 3, kernel_size=1, bias=bias)
+        self.qkv = nn.Conv2d(dim, dim*3, kernel_size=1, bias=bias)
         self.qkv_dwconv = nn.Conv2d(
-            dim * 3,
-            dim * 3,
+            dim*3,
+            dim*3,
             kernel_size=3,
             stride=1,
             padding=1,
-            groups=dim * 3,
+            groups=dim*3,
             bias=bias,
         )
         self.project_out = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
@@ -415,15 +396,15 @@ class Channel_Attention(nn.Module):
         q = F.normalize(q, dim=-1)
         k = F.normalize(k, dim=-1)
 
-        attn = (q @ k.transpose(-2, -1)) * self.temperature
+        attn = (q @ k.transpose(-2, -1))*self.temperature
         attn = attn.softmax(dim=-1)
         out = attn @ v
 
         out = rearrange(
             out,
             "b (h w) head d (ph pw) -> b (head d) (h ph) (w pw)",
-            h=h // self.ps,
-            w=w // self.ps,
+            h=h//self.ps,
+            w=w//self.ps,
             ph=self.ps,
             pw=self.ps,
             head=self.heads,
@@ -443,14 +424,14 @@ class Channel_Attention_grid(nn.Module):
 
         self.ps = window_size
 
-        self.qkv = nn.Conv2d(dim, dim * 3, kernel_size=1, bias=bias)
+        self.qkv = nn.Conv2d(dim, dim*3, kernel_size=1, bias=bias)
         self.qkv_dwconv = nn.Conv2d(
-            dim * 3,
-            dim * 3,
+            dim*3,
+            dim*3,
             kernel_size=3,
             stride=1,
             padding=1,
-            groups=dim * 3,
+            groups=dim*3,
             bias=bias,
         )
         self.project_out = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
@@ -475,15 +456,15 @@ class Channel_Attention_grid(nn.Module):
         q = F.normalize(q, dim=-1)
         k = F.normalize(k, dim=-1)
 
-        attn = (q @ k.transpose(-2, -1)) * self.temperature
+        attn = (q @ k.transpose(-2, -1))*self.temperature
         attn = attn.softmax(dim=-1)
         out = attn @ v
 
         out = rearrange(
             out,
             "b (ph pw) head d (h w) -> b (head d) (h ph) (w pw)",
-            h=h // self.ps,
-            w=w // self.ps,
+            h=h//self.ps,
+            w=w//self.ps,
             ph=self.ps,
             pw=self.ps,
             head=self.heads,
@@ -516,60 +497,44 @@ class OSA_Block(nn.Module):
                 expansion_rate=1,
                 shrinkage_rate=0.25,
             ),
-            Rearrange(
-                "b d (x w1) (y w2) -> b x y w1 w2 d", w1=w, w2=w
-            ),  # block-like attention
+            Rearrange("b d (x w1) (y w2) -> b x y w1 w2 d", w1=w, w2=w),  # block-like attention
             PreNormResidual(
                 channel_num,
                 Attention(
                     dim=channel_num,
-                    dim_head=channel_num // 4,
+                    dim_head=channel_num//4,
                     dropout=dropout,
                     window_size=window_size,
                     with_pe=with_pe,
                 ),
             ),
             Rearrange("b x y w1 w2 d -> b d (x w1) (y w2)"),
-            Conv_PreNormResidual(
-                channel_num, Gated_Conv_FeedForward(dim=channel_num, dropout=dropout)
-            ),
+            Conv_PreNormResidual(channel_num, Gated_Conv_FeedForward(dim=channel_num, dropout=dropout)),
             # channel-like attention
             Conv_PreNormResidual(
                 channel_num,
-                Channel_Attention(
-                    dim=channel_num, heads=4, dropout=dropout, window_size=window_size
-                ),
+                Channel_Attention(dim=channel_num, heads=4, dropout=dropout, window_size=window_size),
             ),
-            Conv_PreNormResidual(
-                channel_num, Gated_Conv_FeedForward(dim=channel_num, dropout=dropout)
-            ),
-            Rearrange(
-                "b d (w1 x) (w2 y) -> b x y w1 w2 d", w1=w, w2=w
-            ),  # grid-like attention
+            Conv_PreNormResidual(channel_num, Gated_Conv_FeedForward(dim=channel_num, dropout=dropout)),
+            Rearrange("b d (w1 x) (w2 y) -> b x y w1 w2 d", w1=w, w2=w),  # grid-like attention
             PreNormResidual(
                 channel_num,
                 Attention(
                     dim=channel_num,
-                    dim_head=channel_num // 4,
+                    dim_head=channel_num//4,
                     dropout=dropout,
                     window_size=window_size,
                     with_pe=with_pe,
                 ),
             ),
             Rearrange("b x y w1 w2 d -> b d (w1 x) (w2 y)"),
-            Conv_PreNormResidual(
-                channel_num, Gated_Conv_FeedForward(dim=channel_num, dropout=dropout)
-            ),
+            Conv_PreNormResidual(channel_num, Gated_Conv_FeedForward(dim=channel_num, dropout=dropout)),
             # channel-like attention
             Conv_PreNormResidual(
                 channel_num,
-                Channel_Attention_grid(
-                    dim=channel_num, heads=4, dropout=dropout, window_size=window_size
-                ),
+                Channel_Attention_grid(dim=channel_num, heads=4, dropout=dropout, window_size=window_size),
             ),
-            Conv_PreNormResidual(
-                channel_num, Gated_Conv_FeedForward(dim=channel_num, dropout=dropout)
-            ),
+            Conv_PreNormResidual(channel_num, Gated_Conv_FeedForward(dim=channel_num, dropout=dropout)),
         )
 
     def forward(self, x):

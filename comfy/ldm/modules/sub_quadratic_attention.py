@@ -16,15 +16,16 @@ from torch.utils.checkpoint import checkpoint
 import math
 
 try:
-	from typing import Optional, NamedTuple, List, Protocol
+    from typing import Optional, NamedTuple, List, Protocol
 except ImportError:
-	from typing import Optional, NamedTuple, List
-	from typing_extensions import Protocol
+    from typing import Optional, NamedTuple, List
+    from typing_extensions import Protocol
 
 from torch import Tensor
 from typing import List
 
 from comfy import model_management
+
 
 def dynamic_slice(
     x: Tensor,
@@ -34,10 +35,12 @@ def dynamic_slice(
     slicing = [slice(start, start + size) for start, size in zip(starts, sizes)]
     return x[slicing]
 
+
 class AttnChunk(NamedTuple):
     exp_values: Tensor
     exp_weights_sum: Tensor
     max_score: Tensor
+
 
 class SummarizeChunk(Protocol):
     @staticmethod
@@ -45,7 +48,9 @@ class SummarizeChunk(Protocol):
         query: Tensor,
         key_t: Tensor,
         value: Tensor,
-    ) -> AttnChunk: ...
+    ) -> AttnChunk:
+        ...
+
 
 class ComputeQueryChunkAttn(Protocol):
     @staticmethod
@@ -53,7 +58,9 @@ class ComputeQueryChunkAttn(Protocol):
         query: Tensor,
         key_t: Tensor,
         value: Tensor,
-    ) -> Tensor: ...
+    ) -> Tensor:
+        ...
+
 
 def _summarize_chunk(
     query: Tensor,
@@ -63,7 +70,7 @@ def _summarize_chunk(
     upcast_attention: bool,
 ) -> AttnChunk:
     if upcast_attention:
-        with torch.autocast(enabled=False, device_type = 'cuda'):
+        with torch.autocast(enabled=False, device_type='cuda'):
             query = query.float()
             key_t = key_t.float()
             attn_weights = torch.baddbmm(
@@ -90,6 +97,7 @@ def _summarize_chunk(
     max_score = max_score.squeeze(-1)
     return AttnChunk(exp_values, exp_weights.sum(dim=-1), max_score)
 
+
 def _query_chunk_attention(
     query: Tensor,
     key_t: Tensor,
@@ -101,21 +109,13 @@ def _query_chunk_attention(
     _, _, v_channels_per_head = value.shape
 
     def chunk_scanner(chunk_idx: int) -> AttnChunk:
-        key_chunk = dynamic_slice(
-            key_t,
-            (0, 0, chunk_idx),
-            (batch_x_heads, k_channels_per_head, kv_chunk_size)
-        )
-        value_chunk = dynamic_slice(
-            value,
-            (0, chunk_idx, 0),
-            (batch_x_heads, kv_chunk_size, v_channels_per_head)
-        )
+        key_chunk = dynamic_slice(key_t, (0, 0, chunk_idx),
+                                  (batch_x_heads, k_channels_per_head, kv_chunk_size))
+        value_chunk = dynamic_slice(value, (0, chunk_idx, 0),
+                                    (batch_x_heads, kv_chunk_size, v_channels_per_head))
         return summarize_chunk(query, key_chunk, value_chunk)
 
-    chunks: List[AttnChunk] = [
-        chunk_scanner(chunk) for chunk in torch.arange(0, k_tokens, kv_chunk_size)
-    ]
+    chunks: List[AttnChunk] = [chunk_scanner(chunk) for chunk in torch.arange(0, k_tokens, kv_chunk_size)]
     acc_chunk = AttnChunk(*map(torch.stack, zip(*chunks)))
     chunk_values, chunk_weights, chunk_max = acc_chunk
 
@@ -126,7 +126,8 @@ def _query_chunk_attention(
 
     all_values = chunk_values.sum(dim=0)
     all_weights = torch.unsqueeze(chunk_weights, -1).sum(dim=0)
-    return all_values / all_weights
+    return all_values/all_weights
+
 
 # TODO: refactor CrossAttention#get_attention_scores to share code with this
 def _get_attention_scores_no_kv_chunking(
@@ -137,7 +138,7 @@ def _get_attention_scores_no_kv_chunking(
     upcast_attention: bool,
 ) -> Tensor:
     if upcast_attention:
-        with torch.autocast(enabled=False, device_type = 'cuda'):
+        with torch.autocast(enabled=False, device_type='cuda'):
             query = query.float()
             key_t = key_t.float()
             attn_scores = torch.baddbmm(
@@ -160,7 +161,9 @@ def _get_attention_scores_no_kv_chunking(
         attn_probs = attn_scores.softmax(dim=-1)
         del attn_scores
     except model_management.OOM_EXCEPTION:
-        print("ran out of memory while running softmax in  _get_attention_scores_no_kv_chunking, trying slower in place softmax instead")
+        print(
+            "ran out of memory while running softmax in  _get_attention_scores_no_kv_chunking, trying slower in place softmax instead"
+        )
         attn_scores -= attn_scores.max(dim=-1, keepdim=True).values
         torch.exp(attn_scores, out=attn_scores)
         summed = torch.sum(attn_scores, dim=-1, keepdim=True)
@@ -170,9 +173,11 @@ def _get_attention_scores_no_kv_chunking(
     hidden_states_slice = torch.bmm(attn_probs.to(value.dtype), value)
     return hidden_states_slice
 
+
 class ScannedChunk(NamedTuple):
     chunk_idx: int
     attn_chunk: AttnChunk
+
 
 def efficient_dot_product_attention(
     query: Tensor,
@@ -203,33 +208,29 @@ def efficient_dot_product_attention(
       """
     batch_x_heads, q_tokens, q_channels_per_head = query.shape
     _, _, k_tokens = key_t.shape
-    scale = q_channels_per_head ** -0.5
+    scale = q_channels_per_head**-0.5
 
     kv_chunk_size = min(kv_chunk_size or int(math.sqrt(k_tokens)), k_tokens)
     if kv_chunk_size_min is not None:
         kv_chunk_size = max(kv_chunk_size, kv_chunk_size_min)
 
     def get_query_chunk(chunk_idx: int) -> Tensor:
-        return dynamic_slice(
-            query,
-            (0, chunk_idx, 0),
-            (batch_x_heads, min(query_chunk_size, q_tokens), q_channels_per_head)
-        )
-    
-    summarize_chunk: SummarizeChunk = partial(_summarize_chunk, scale=scale, upcast_attention=upcast_attention)
-    summarize_chunk: SummarizeChunk = partial(checkpoint, summarize_chunk) if use_checkpoint else summarize_chunk
+        return dynamic_slice(query, (0, chunk_idx, 0),
+                             (batch_x_heads, min(query_chunk_size, q_tokens), q_channels_per_head))
+
+    summarize_chunk: SummarizeChunk = partial(_summarize_chunk, scale=scale,
+                                              upcast_attention=upcast_attention)
+    summarize_chunk: SummarizeChunk = partial(checkpoint,
+                                              summarize_chunk) if use_checkpoint else summarize_chunk
     compute_query_chunk_attn: ComputeQueryChunkAttn = partial(
-        _get_attention_scores_no_kv_chunking,
-        scale=scale,
-        upcast_attention=upcast_attention
+        _get_attention_scores_no_kv_chunking, scale=scale, upcast_attention=upcast_attention
     ) if k_tokens <= kv_chunk_size else (
         # fast-path for when there's just 1 key-value chunk per query chunk (this is just sliced attention btw)
         partial(
             _query_chunk_attention,
             kv_chunk_size=kv_chunk_size,
             summarize_chunk=summarize_chunk,
-        )
-    )
+        ))
 
     if q_tokens <= query_chunk_size:
         # fast-path for when there's just 1 query chunk
@@ -238,14 +239,14 @@ def efficient_dot_product_attention(
             key_t=key_t,
             value=value,
         )
-    
+
     # TODO: maybe we should use torch.empty_like(query) to allocate storage in-advance,
     # and pass slices to be mutated, instead of torch.cat()ing the returned slices
     res = torch.cat([
         compute_query_chunk_attn(
-            query=get_query_chunk(i * query_chunk_size),
+            query=get_query_chunk(i*query_chunk_size),
             key_t=key_t,
             value=value,
-        ) for i in range(math.ceil(q_tokens / query_chunk_size))
+        ) for i in range(math.ceil(q_tokens/query_chunk_size))
     ], dim=1)
     return res

@@ -100,10 +100,11 @@ prompt_text = """
 }
 """
 
+
 def queue_prompt(prompt):
     p = {"prompt": prompt}
     data = json.dumps(p).encode('utf-8')
-    req =  request.Request("http://127.0.0.1:8188/prompt", data=data)
+    req = request.Request("http://127.0.0.1:8188/prompt", data=data)
     request.urlopen(req)
 
 
@@ -114,7 +115,4 @@ prompt["6"]["inputs"]["text"] = "masterpiece best quality man"
 #set the seed for our KSampler node
 prompt["3"]["inputs"]["seed"] = 5
 
-
 queue_prompt(prompt)
-
-

@@ -1,12 +1,18 @@
 import os
 import pytest
 
+
 # Command line arguments for pytest
 def pytest_addoption(parser):
-    parser.addoption('--baseline_dir', action="store", default='tests/inference/baseline', help='Directory for ground-truth images')
-    parser.addoption('--test_dir', action="store", default='tests/inference/samples', help='Directory for images to test')
-    parser.addoption('--metrics_file', action="store", default='tests/metrics.md', help='Output file for metrics')
-    parser.addoption('--img_output_dir', action="store", default='tests/compare/samples', help='Output directory for diff metric images')
+    parser.addoption('--baseline_dir', action="store", default='tests/inference/baseline',
+                     help='Directory for ground-truth images')
+    parser.addoption('--test_dir', action="store", default='tests/inference/samples',
+                     help='Directory for images to test')
+    parser.addoption('--metrics_file', action="store", default='tests/metrics.md',
+                     help='Output file for metrics')
+    parser.addoption('--img_output_dir', action="store", default='tests/compare/samples',
+                     help='Output directory for diff metric images')
+
 
 # This initializes args at the beginning of the test session
 @pytest.fixture(scope="session", autouse=True)
@@ -33,6 +39,7 @@ def gather_file_basenames(directory: str):
         if file.endswith(".png"):
             files.append(file)
     return files
+
 
 # Creates the list of baseline file names to use as a fixture
 def pytest_generate_tests(metafunc):

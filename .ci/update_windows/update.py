@@ -2,6 +2,7 @@ import pygit2
 from datetime import datetime
 import sys
 
+
 def pull(repo, remote_name='origin', branch='master'):
     for remote in repo.remotes:
         if remote.name == remote_name:
@@ -30,16 +31,13 @@ def pull(repo, remote_name='origin', branch='master'):
 
                 user = repo.default_signature
                 tree = repo.index.write_tree()
-                commit = repo.create_commit('HEAD',
-                                            user,
-                                            user,
-                                            'Merge!',
-                                            tree,
+                commit = repo.create_commit('HEAD', user, user, 'Merge!', tree,
                                             [repo.head.target, remote_master_id])
                 # We need to do this or git CLI will think we are still merging.
                 repo.state_cleanup()
             else:
                 raise AssertionError('Unknown merge analysis result')
+
 
 pygit2.option(pygit2.GIT_OPT_SET_OWNER_VALIDATION, 0)
 repo = pygit2.Repository(str(sys.argv[1]))
@@ -62,4 +60,3 @@ print("pulling latest changes")
 pull(repo)
 
 print("Done!")
-

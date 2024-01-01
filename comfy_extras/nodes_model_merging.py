@@ -9,14 +9,24 @@ import os
 
 from comfy.cli_args import args
 
+
 class ModelMergeSimple:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "model1": ("MODEL",),
-                              "model2": ("MODEL",),
-                              "ratio": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-                              }}
-    RETURN_TYPES = ("MODEL",)
+        return {
+            "required": {
+                "model1": ("MODEL", ),
+                "model2": ("MODEL", ),
+                "ratio": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.01
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("MODEL", )
     FUNCTION = "merge"
 
     CATEGORY = "advanced/model_merging"
@@ -28,14 +38,24 @@ class ModelMergeSimple:
             m.add_patches({k: kp[k]}, 1.0 - ratio, ratio)
         return (m, )
 
+
 class ModelSubtract:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "model1": ("MODEL",),
-                              "model2": ("MODEL",),
-                              "multiplier": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01}),
-                              }}
-    RETURN_TYPES = ("MODEL",)
+        return {
+            "required": {
+                "model1": ("MODEL", ),
+                "model2": ("MODEL", ),
+                "multiplier": ("FLOAT", {
+                    "default": 1.0,
+                    "min": -10.0,
+                    "max": 10.0,
+                    "step": 0.01
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("MODEL", )
     FUNCTION = "merge"
 
     CATEGORY = "advanced/model_merging"
@@ -44,16 +64,21 @@ class ModelSubtract:
         m = model1.clone()
         kp = model2.get_key_patches("diffusion_model.")
         for k in kp:
-            m.add_patches({k: kp[k]}, - multiplier, multiplier)
+            m.add_patches({k: kp[k]}, -multiplier, multiplier)
         return (m, )
+
 
 class ModelAdd:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "model1": ("MODEL",),
-                              "model2": ("MODEL",),
-                              }}
-    RETURN_TYPES = ("MODEL",)
+        return {
+            "required": {
+                "model1": ("MODEL", ),
+                "model2": ("MODEL", ),
+            }
+        }
+
+    RETURN_TYPES = ("MODEL", )
     FUNCTION = "merge"
 
     CATEGORY = "advanced/model_merging"
@@ -69,11 +94,20 @@ class ModelAdd:
 class CLIPMergeSimple:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "clip1": ("CLIP",),
-                              "clip2": ("CLIP",),
-                              "ratio": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-                              }}
-    RETURN_TYPES = ("CLIP",)
+        return {
+            "required": {
+                "clip1": ("CLIP", ),
+                "clip2": ("CLIP", ),
+                "ratio": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.01
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("CLIP", )
     FUNCTION = "merge"
 
     CATEGORY = "advanced/model_merging"
@@ -87,16 +121,36 @@ class CLIPMergeSimple:
             m.add_patches({k: kp[k]}, 1.0 - ratio, ratio)
         return (m, )
 
+
 class ModelMergeBlocks:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "model1": ("MODEL",),
-                              "model2": ("MODEL",),
-                              "input": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-                              "middle": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-                              "out": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01})
-                              }}
-    RETURN_TYPES = ("MODEL",)
+        return {
+            "required": {
+                "model1": ("MODEL", ),
+                "model2": ("MODEL", ),
+                "input": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.01
+                }),
+                "middle": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.01
+                }),
+                "out": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.01
+                })
+            }
+        }
+
+    RETURN_TYPES = ("MODEL", )
     FUNCTION = "merge"
 
     CATEGORY = "advanced/model_merging"
@@ -119,17 +173,28 @@ class ModelMergeBlocks:
             m.add_patches({k: kp[k]}, 1.0 - ratio, ratio)
         return (m, )
 
+
 class CheckpointSave:
     def __init__(self):
         self.output_dir = folder_paths.get_output_directory()
 
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "model": ("MODEL",),
-                              "clip": ("CLIP",),
-                              "vae": ("VAE",),
-                              "filename_prefix": ("STRING", {"default": "checkpoints/ComfyUI"}),},
-                "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},}
+        return {
+            "required": {
+                "model": ("MODEL", ),
+                "clip": ("CLIP", ),
+                "vae": ("VAE", ),
+                "filename_prefix": ("STRING", {
+                    "default": "checkpoints/ComfyUI"
+                }),
+            },
+            "hidden": {
+                "prompt": "PROMPT",
+                "extra_pnginfo": "EXTRA_PNGINFO"
+            },
+        }
+
     RETURN_TYPES = ()
     FUNCTION = "save"
     OUTPUT_NODE = True
@@ -137,7 +202,8 @@ class CheckpointSave:
     CATEGORY = "advanced/model_merging"
 
     def save(self, model, clip, vae, filename_prefix, prompt=None, extra_pnginfo=None):
-        full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(filename_prefix, self.output_dir)
+        full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(
+            filename_prefix, self.output_dir)
         prompt_info = ""
         if prompt is not None:
             prompt_info = json.dumps(prompt)
@@ -179,15 +245,26 @@ class CheckpointSave:
         comfy.sd.save_checkpoint(output_checkpoint, model, clip, vae, metadata=metadata)
         return {}
 
+
 class CLIPSave:
     def __init__(self):
         self.output_dir = folder_paths.get_output_directory()
 
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "clip": ("CLIP",),
-                              "filename_prefix": ("STRING", {"default": "clip/ComfyUI"}),},
-                "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},}
+        return {
+            "required": {
+                "clip": ("CLIP", ),
+                "filename_prefix": ("STRING", {
+                    "default": "clip/ComfyUI"
+                }),
+            },
+            "hidden": {
+                "prompt": "PROMPT",
+                "extra_pnginfo": "EXTRA_PNGINFO"
+            },
+        }
+
     RETURN_TYPES = ()
     FUNCTION = "save"
     OUTPUT_NODE = True
@@ -225,7 +302,8 @@ class CLIPSave:
                 replace_prefix[prefix] = ""
             replace_prefix["transformer."] = ""
 
-            full_output_folder, filename, counter, subfolder, filename_prefix_ = folder_paths.get_save_image_path(filename_prefix_, self.output_dir)
+            full_output_folder, filename, counter, subfolder, filename_prefix_ = folder_paths.get_save_image_path(
+                filename_prefix_, self.output_dir)
 
             output_checkpoint = f"{filename}_{counter:05}_.safetensors"
             output_checkpoint = os.path.join(full_output_folder, output_checkpoint)
@@ -235,15 +313,26 @@ class CLIPSave:
             comfy.utils.save_torch_file(current_clip_sd, output_checkpoint, metadata=metadata)
         return {}
 
+
 class VAESave:
     def __init__(self):
         self.output_dir = folder_paths.get_output_directory()
 
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { "vae": ("VAE",),
-                              "filename_prefix": ("STRING", {"default": "vae/ComfyUI_vae"}),},
-                "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},}
+        return {
+            "required": {
+                "vae": ("VAE", ),
+                "filename_prefix": ("STRING", {
+                    "default": "vae/ComfyUI_vae"
+                }),
+            },
+            "hidden": {
+                "prompt": "PROMPT",
+                "extra_pnginfo": "EXTRA_PNGINFO"
+            },
+        }
+
     RETURN_TYPES = ()
     FUNCTION = "save"
     OUTPUT_NODE = True
@@ -251,7 +340,8 @@ class VAESave:
     CATEGORY = "advanced/model_merging"
 
     def save(self, vae, filename_prefix, prompt=None, extra_pnginfo=None):
-        full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(filename_prefix, self.output_dir)
+        full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(
+            filename_prefix, self.output_dir)
         prompt_info = ""
         if prompt is not None:
             prompt_info = json.dumps(prompt)
@@ -268,6 +358,7 @@ class VAESave:
 
         comfy.utils.save_torch_file(vae.get_sd(), output_checkpoint, metadata=metadata)
         return {}
+
 
 NODE_CLASS_MAPPINGS = {
     "ModelMergeSimple": ModelMergeSimple,

@@ -19,7 +19,6 @@ class SRVGGNetCompact(nn.Module):
         upscale (int): Upsampling factor. Default: 4.
         act_type (str): Activation type, options: 'relu', 'prelu', 'leakyrelu'. Default: prelu.
     """
-
     def __init__(
         self,
         state_dict,
@@ -81,7 +80,7 @@ class SRVGGNetCompact(nn.Module):
         self.load_state_dict(self.state, strict=False)
 
     def get_num_conv(self) -> int:
-        return (int(self.key_arr[-1].split(".")[1]) - 2) // 2
+        return (int(self.key_arr[-1].split(".")[1]) - 2)//2
 
     def get_num_feats(self) -> int:
         return self.state[self.key_arr[0]].shape[0]
@@ -94,11 +93,9 @@ class SRVGGNetCompact(nn.Module):
         # Assume out_nc is the same as in_nc
         # I cant think of a better way to do that
         self.out_nc = self.in_nc
-        scale = math.sqrt(self.pixelshuffle_shape / self.out_nc)
+        scale = math.sqrt(self.pixelshuffle_shape/self.out_nc)
         if scale - int(scale) > 0:
-            print(
-                "out_nc is probably different than in_nc, scale calculation might be wrong"
-            )
+            print("out_nc is probably different than in_nc, scale calculation might be wrong")
         scale = int(scale)
         return scale
 

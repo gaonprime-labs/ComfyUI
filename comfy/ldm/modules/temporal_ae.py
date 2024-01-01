@@ -5,6 +5,7 @@ import torch
 from einops import rearrange, repeat
 
 import comfy.ops
+
 ops = comfy.ops.disable_weight_init
 
 from .diffusionmodules.model import (
@@ -14,6 +15,7 @@ from .diffusionmodules.model import (
 )
 from .diffusionmodules.openaimodel import ResBlock, timestep_embedding
 from .attention import BasicTransformerBlock
+
 
 def partialclass(cls, *args, **kwargs):
     class NewCls(cls):
@@ -54,9 +56,7 @@ class VideoResBlock(ResnetBlock):
         if self.merge_strategy == "fixed":
             self.register_buffer("mix_factor", torch.Tensor([alpha]))
         elif self.merge_strategy == "learned":
-            self.register_parameter(
-                "mix_factor", torch.nn.Parameter(torch.Tensor([alpha]))
-            )
+            self.register_parameter("mix_factor", torch.nn.Parameter(torch.Tensor([alpha])))
         else:
             raise ValueError(f"unknown merge strategy {self.merge_strategy}")
 
@@ -82,8 +82,8 @@ class VideoResBlock(ResnetBlock):
 
             x = self.time_stack(x, temb)
 
-            alpha = self.get_alpha(bs=b // timesteps).to(x.device)
-            x = alpha * x + (1.0 - alpha) * x_mix
+            alpha = self.get_alpha(bs=b//timesteps).to(x.device)
+            x = alpha*x + (1.0 - alpha)*x_mix
 
             x = rearrange(x, "b c t h w -> (b t) c h w")
         return x
@@ -93,9 +93,9 @@ class AE3DConv(ops.Conv2d):
     def __init__(self, in_channels, out_channels, video_kernel_size=3, *args, **kwargs):
         super().__init__(in_channels, out_channels, *args, **kwargs)
         if isinstance(video_kernel_size, Iterable):
-            padding = [int(k // 2) for k in video_kernel_size]
+            padding = [int(k//2) for k in video_kernel_size]
         else:
-            padding = int(video_kernel_size // 2)
+            padding = int(video_kernel_size//2)
 
         self.time_mix_conv = ops.Conv3d(
             in_channels=out_channels,
@@ -116,9 +116,7 @@ class AE3DConv(ops.Conv2d):
 
 
 class AttnVideoBlock(AttnBlock):
-    def __init__(
-        self, in_channels: int, alpha: float = 0, merge_strategy: str = "learned"
-    ):
+    def __init__(self, in_channels: int, alpha: float = 0, merge_strategy: str = "learned"):
         super().__init__(in_channels)
         # no context, single headed, as in base class
         self.time_mix_block = BasicTransformerBlock(
@@ -129,7 +127,7 @@ class AttnVideoBlock(AttnBlock):
             ff_in=True,
         )
 
-        time_embed_dim = self.in_channels * 4
+        time_embed_dim = self.in_channels*4
         self.video_time_embed = torch.nn.Sequential(
             ops.Linear(self.in_channels, time_embed_dim),
             torch.nn.SiLU(),
@@ -140,9 +138,7 @@ class AttnVideoBlock(AttnBlock):
         if self.merge_strategy == "fixed":
             self.register_buffer("mix_factor", torch.Tensor([alpha]))
         elif self.merge_strategy == "learned":
-            self.register_parameter(
-                "mix_factor", torch.nn.Parameter(torch.Tensor([alpha]))
-            )
+            self.register_parameter("mix_factor", torch.nn.Parameter(torch.Tensor([alpha])))
         else:
             raise ValueError(f"unknown merge strategy {self.merge_strategy}")
 
@@ -160,7 +156,7 @@ class AttnVideoBlock(AttnBlock):
 
         x_mix = x
         num_frames = torch.arange(timesteps, device=x.device)
-        num_frames = repeat(num_frames, "t -> b t", b=x.shape[0] // timesteps)
+        num_frames = repeat(num_frames, "t -> b t", b=x.shape[0]//timesteps)
         num_frames = rearrange(num_frames, "b t -> (b t)")
         t_emb = timestep_embedding(num_frames, self.in_channels, repeat_only=False)
         emb = self.video_time_embed(t_emb)  # b, n_channels
@@ -169,23 +165,20 @@ class AttnVideoBlock(AttnBlock):
 
         alpha = self.get_alpha().to(x.device)
         x_mix = self.time_mix_block(x_mix, timesteps=timesteps)
-        x = alpha * x + (1.0 - alpha) * x_mix  # alpha merge
+        x = alpha*x + (1.0 - alpha)*x_mix  # alpha merge
 
         x = rearrange(x, "b (h w) c -> b c h w", h=h, w=w)
         x = self.proj_out(x)
 
         return x_in + x
 
-    def get_alpha(
-        self,
-    ):
+    def get_alpha(self, ):
         if self.merge_strategy == "fixed":
             return self.mix_factor
         elif self.merge_strategy == "learned":
             return torch.sigmoid(self.mix_factor)
         else:
             raise NotImplementedError(f"unknown merge strategy {self.merge_strategy}")
-
 
 
 def make_time_attn(
@@ -195,9 +188,7 @@ def make_time_attn(
     alpha: float = 0,
     merge_strategy: str = "learned",
 ):
-    return partialclass(
-        AttnVideoBlock, in_channels, alpha=alpha, merge_strategy=merge_strategy
-    )
+    return partialclass(AttnVideoBlock, in_channels, alpha=alpha, merge_strategy=merge_strategy)
 
 
 class Conv2DWrapper(torch.nn.Conv2d):
@@ -221,16 +212,17 @@ class VideoDecoder(Decoder):
         self.alpha = alpha
         self.merge_strategy = merge_strategy
         self.time_mode = time_mode
-        assert (
-            self.time_mode in self.available_time_modes
-        ), f"time_mode parameter has to be in {self.available_time_modes}"
+        assert (self.time_mode
+                in self.available_time_modes), f"time_mode parameter has to be in {self.available_time_modes}"
 
         if self.time_mode != "attn-only":
             kwargs["conv_out_op"] = partialclass(AE3DConv, video_kernel_size=self.video_kernel_size)
         if self.time_mode not in ["conv-only", "only-last-conv"]:
-            kwargs["attn_op"] = partialclass(make_time_attn, alpha=self.alpha, merge_strategy=self.merge_strategy)
+            kwargs["attn_op"] = partialclass(make_time_attn, alpha=self.alpha,
+                                             merge_strategy=self.merge_strategy)
         if self.time_mode not in ["attn-only", "only-last-conv"]:
-            kwargs["resnet_op"] = partialclass(VideoResBlock, video_kernel_size=self.video_kernel_size, alpha=self.alpha, merge_strategy=self.merge_strategy)
+            kwargs["resnet_op"] = partialclass(VideoResBlock, video_kernel_size=self.video_kernel_size,
+                                               alpha=self.alpha, merge_strategy=self.merge_strategy)
 
         super().__init__(*args, **kwargs)
 
@@ -238,8 +230,4 @@ class VideoDecoder(Decoder):
         if self.time_mode == "attn-only":
             raise NotImplementedError("TODO")
         else:
-            return (
-                self.conv_out.time_mix_conv.weight
-                if not skip_time_mix
-                else self.conv_out.weight
-            )
+            return (self.conv_out.time_mix_conv.weight if not skip_time_mix else self.conv_out.weight)

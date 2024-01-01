@@ -10,6 +10,7 @@ from comfy.ldm.util import instantiate_from_config
 from comfy.ldm.modules.ema import LitEma
 import comfy.ops
 
+
 class DiagonalGaussianRegularizer(torch.nn.Module):
     def __init__(self, sample: bool = True):
         super().__init__()
@@ -26,7 +27,7 @@ class DiagonalGaussianRegularizer(torch.nn.Module):
         else:
             z = posterior.mode()
         kl_loss = posterior.kl()
-        kl_loss = torch.sum(kl_loss) / kl_loss.shape[0]
+        kl_loss = torch.sum(kl_loss)/kl_loss.shape[0]
         log["kl_loss"] = kl_loss
         return z, log
 
@@ -37,7 +38,6 @@ class AbstractAutoencoder(torch.nn.Module):
     unCLIP models, etc. Hence, it is fairly general, and specific features
     (e.g. discriminator training, encoding, decoding) must be implemented in subclasses.
     """
-
     def __init__(
         self,
         ema_decay: Union[None, float] = None,
@@ -87,9 +87,7 @@ class AbstractAutoencoder(torch.nn.Module):
 
     def instantiate_optimizer_from_config(self, params, lr, cfg):
         logpy.info(f"loading >>> {cfg['target']} <<< optimizer from config")
-        return get_obj_from_str(cfg["target"])(
-            params, lr=lr, **cfg.get("params", dict())
-        )
+        return get_obj_from_str(cfg["target"])(params, lr=lr, **cfg.get("params", dict()))
 
     def configure_optimizers(self) -> Any:
         raise NotImplementedError()
@@ -101,7 +99,6 @@ class AutoencodingEngine(AbstractAutoencoder):
     (we also restore them explicitly as special cases for legacy reasons).
     Regularizations such as KL or VQ are moved to the regularizer class.
     """
-
     def __init__(
         self,
         *args,
@@ -114,9 +111,7 @@ class AutoencodingEngine(AbstractAutoencoder):
 
         self.encoder: torch.nn.Module = instantiate_from_config(encoder_config)
         self.decoder: torch.nn.Module = instantiate_from_config(decoder_config)
-        self.regularization: AbstractRegularizer = instantiate_from_config(
-            regularizer_config
-        )
+        self.regularization: AbstractRegularizer = instantiate_from_config(regularizer_config)
 
     def get_last_layer(self):
         return self.decoder.get_last_layer()
@@ -139,9 +134,7 @@ class AutoencodingEngine(AbstractAutoencoder):
         x = self.decoder(z, **kwargs)
         return x
 
-    def forward(
-        self, x: torch.Tensor, **additional_decode_kwargs
-    ) -> Tuple[torch.Tensor, torch.Tensor, dict]:
+    def forward(self, x: torch.Tensor, **additional_decode_kwargs) -> Tuple[torch.Tensor, torch.Tensor, dict]:
         z, reg_log = self.encode(x, return_reg_log=True)
         dec = self.decode(z, **additional_decode_kwargs)
         return z, dec, reg_log
@@ -163,8 +156,8 @@ class AutoencodingEngineLegacy(AutoencodingEngine):
             **kwargs,
         )
         self.quant_conv = comfy.ops.disable_weight_init.Conv2d(
-            (1 + ddconfig["double_z"]) * ddconfig["z_channels"],
-            (1 + ddconfig["double_z"]) * embed_dim,
+            (1 + ddconfig["double_z"])*ddconfig["z_channels"],
+            (1 + ddconfig["double_z"])*embed_dim,
             1,
         )
         self.post_quant_conv = comfy.ops.disable_weight_init.Conv2d(embed_dim, ddconfig["z_channels"], 1)
@@ -174,19 +167,18 @@ class AutoencodingEngineLegacy(AutoencodingEngine):
         params = super().get_autoencoder_params()
         return params
 
-    def encode(
-        self, x: torch.Tensor, return_reg_log: bool = False
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, dict]]:
+    def encode(self, x: torch.Tensor,
+               return_reg_log: bool = False) -> Union[torch.Tensor, Tuple[torch.Tensor, dict]]:
         if self.max_batch_size is None:
             z = self.encoder(x)
             z = self.quant_conv(z)
         else:
             N = x.shape[0]
             bs = self.max_batch_size
-            n_batches = int(math.ceil(N / bs))
+            n_batches = int(math.ceil(N/bs))
             z = list()
             for i_batch in range(n_batches):
-                z_batch = self.encoder(x[i_batch * bs : (i_batch + 1) * bs])
+                z_batch = self.encoder(x[i_batch*bs:(i_batch + 1)*bs])
                 z_batch = self.quant_conv(z_batch)
                 z.append(z_batch)
             z = torch.cat(z, 0)
@@ -203,10 +195,10 @@ class AutoencodingEngineLegacy(AutoencodingEngine):
         else:
             N = z.shape[0]
             bs = self.max_batch_size
-            n_batches = int(math.ceil(N / bs))
+            n_batches = int(math.ceil(N/bs))
             dec = list()
             for i_batch in range(n_batches):
-                dec_batch = self.post_quant_conv(z[i_batch * bs : (i_batch + 1) * bs])
+                dec_batch = self.post_quant_conv(z[i_batch*bs:(i_batch + 1)*bs])
                 dec_batch = self.decoder(dec_batch, **decoder_kwargs)
                 dec.append(dec_batch)
             dec = torch.cat(dec, 0)
@@ -219,10 +211,6 @@ class AutoencoderKL(AutoencodingEngineLegacy):
         if "lossconfig" in kwargs:
             kwargs["loss_config"] = kwargs.pop("lossconfig")
         super().__init__(
-            regularizer_config={
-                "target": (
-                    "comfy.ldm.models.autoencoder.DiagonalGaussianRegularizer"
-                )
-            },
+            regularizer_config={"target": ("comfy.ldm.models.autoencoder.DiagonalGaussianRegularizer")},
             **kwargs,
         )

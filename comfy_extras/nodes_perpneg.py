@@ -8,11 +8,19 @@ import comfy.utils
 class PerpNeg:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {"model": ("MODEL", ),
-                             "empty_conditioning": ("CONDITIONING", ),
-                             "neg_scale": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0}),
-                            }}
-    RETURN_TYPES = ("MODEL",)
+        return {
+            "required": {
+                "model": ("MODEL", ),
+                "empty_conditioning": ("CONDITIONING", ),
+                "neg_scale": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 100.0
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("MODEL", )
     FUNCTION = "patch"
 
     CATEGORY = "_for_testing"
@@ -29,14 +37,16 @@ class PerpNeg:
             x = args["input"]
             sigma = args["sigma"]
             model_options = args["model_options"]
-            nocond_processed = comfy.samplers.encode_model_conds(model.extra_conds, nocond, x, x.device, "negative")
+            nocond_processed = comfy.samplers.encode_model_conds(model.extra_conds, nocond, x, x.device,
+                                                                 "negative")
 
-            (noise_pred_nocond, _) = comfy.samplers.calc_cond_uncond_batch(model, nocond_processed, None, x, sigma, model_options)
+            (noise_pred_nocond, _) = comfy.samplers.calc_cond_uncond_batch(model, nocond_processed, None, x,
+                                                                           sigma, model_options)
 
             pos = noise_pred_pos - noise_pred_nocond
             neg = noise_pred_neg - noise_pred_nocond
-            perp = ((torch.mul(pos, neg).sum())/(torch.norm(neg)**2)) * neg
-            perp_neg = perp * neg_scale
+            perp = ((torch.mul(pos, neg).sum())/(torch.norm(neg)**2))*neg
+            perp_neg = perp*neg_scale
             cfg_result = noise_pred_nocond + cond_scale*(pos - perp_neg)
             cfg_result = x - cfg_result
             return cfg_result

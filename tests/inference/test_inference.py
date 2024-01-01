@@ -11,23 +11,23 @@ import torch
 from typing import Union
 import json
 import subprocess
-import websocket #NOTE: websocket-client (https://github.com/websocket-client/websocket-client)
+import websocket  #NOTE: websocket-client (https://github.com/websocket-client/websocket-client)
 import uuid
 import urllib.request
 import urllib.parse
 
-
 from comfy.samplers import KSampler
-
 """
 These tests generate and save images through a range of parameters
 """
 
+
 class ComfyGraph:
-    def __init__(self, 
-                 graph: dict,
-                 sampler_nodes: list[str],
-                 ):
+    def __init__(
+        self,
+        graph: dict,
+        sampler_nodes: list[str],
+    ):
         self.graph = graph
         self.sampler_nodes = sampler_nodes
 
@@ -40,17 +40,20 @@ class ComfyGraph:
                 negative_prompt_node = self.graph[node]['inputs']['negative'][0]
                 self.graph[negative_prompt_node]['inputs']['text'] = negative_prompt
 
-    def set_sampler_name(self, sampler_name:str, ):
+    def set_sampler_name(
+        self,
+        sampler_name: str,
+    ):
         # sets the sampler name for the sampler nodes (eg. base and refiner)
         for node in self.sampler_nodes:
             self.graph[node]['inputs']['sampler_name'] = sampler_name
-    
-    def set_scheduler(self, scheduler:str):
+
+    def set_scheduler(self, scheduler: str):
         # sets the sampler name for the sampler nodes (eg. base and refiner)
         for node in self.sampler_nodes:
             self.graph[node]['inputs']['scheduler'] = scheduler
-    
-    def set_filename_prefix(self, prefix:str):
+
+    def set_filename_prefix(self, prefix: str):
         # sets the filename prefix for the save nodes
         for node in self.graph:
             if self.graph[node]['class_type'] == 'SaveImage':
@@ -60,11 +63,8 @@ class ComfyGraph:
 class ComfyClient:
     # From examples/websockets_api_example.py
 
-    def connect(self, 
-                    listen:str = '127.0.0.1', 
-                    port:Union[str,int] = 8188,
-                    client_id: str = str(uuid.uuid4())
-                    ):
+    def connect(self, listen: str = '127.0.0.1', port: Union[str, int] = 8188,
+                client_id: str = str(uuid.uuid4())):
         self.client_id = client_id
         self.server_address = f"{listen}:{port}"
         ws = websocket.WebSocket()
@@ -74,7 +74,7 @@ class ComfyClient:
     def queue_prompt(self, prompt):
         p = {"prompt": prompt, "client_id": self.client_id}
         data = json.dumps(p).encode('utf-8')
-        req =  urllib.request.Request("http://{}/prompt".format(self.server_address), data=data)
+        req = urllib.request.Request("http://{}/prompt".format(self.server_address), data=data)
         return json.loads(urllib.request.urlopen(req).read())
 
     def get_image(self, filename, subfolder, folder_type):
@@ -84,7 +84,8 @@ class ComfyClient:
             return response.read()
 
     def get_history(self, prompt_id):
-        with urllib.request.urlopen("http://{}/history/{}".format(self.server_address, prompt_id)) as response:
+        with urllib.request.urlopen("http://{}/history/{}".format(self.server_address,
+                                                                  prompt_id)) as response:
             return json.loads(response.read())
 
     def get_images(self, graph, save=True):
@@ -104,9 +105,9 @@ class ComfyClient:
                 if message['type'] == 'executing':
                     data = message['data']
                     if data['node'] is None and data['prompt_id'] == prompt_id:
-                        break #Execution is done
+                        break  #Execution is done
             else:
-                continue #previews are binary data
+                continue  #previews are binary data
 
         history = self.get_history(prompt_id)[prompt_id]
         for o in history['outputs']:
@@ -121,13 +122,14 @@ class ComfyClient:
 
         return output_images
 
+
 #
 # Initialize graphs
 #
 default_graph_file = 'tests/inference/graphs/default_graph_sdxl1_0.json'
 with open(default_graph_file, 'r') as file:
     default_graph = json.loads(file.read())
-DEFAULT_COMFY_GRAPH = ComfyGraph(graph=default_graph, sampler_nodes=['10','14'])
+DEFAULT_COMFY_GRAPH = ComfyGraph(graph=default_graph, sampler_nodes=['10', '14'])
 DEFAULT_COMFY_GRAPH_ID = os.path.splitext(os.path.basename(default_graph_file))[0]
 
 #
@@ -142,6 +144,7 @@ prompt_list = [
 sampler_list = KSampler.SAMPLERS
 scheduler_list = KSampler.SCHEDULERS
 
+
 @pytest.mark.inference
 @pytest.mark.parametrize("sampler", sampler_list)
 @pytest.mark.parametrize("scheduler", scheduler_list)
@@ -154,16 +157,20 @@ class TestInference:
     def _server(self, args_pytest):
         # Start server
         p = subprocess.Popen([
-                'python','main.py', 
-                '--output-directory', args_pytest["output_dir"],
-                '--listen', args_pytest["listen"],
-                '--port', str(args_pytest["port"]),
-                ])
+            'python',
+            'main.py',
+            '--output-directory',
+            args_pytest["output_dir"],
+            '--listen',
+            args_pytest["listen"],
+            '--port',
+            str(args_pytest["port"]),
+        ])
         yield
         p.kill()
         torch.cuda.empty_cache()
 
-    def start_client(self, listen:str, port:int):
+    def start_client(self, listen: str, port: int):
         # Start client
         comfy_client = ComfyClient()
         # Connect to server (with retries)
@@ -187,7 +194,7 @@ class TestInference:
     @fixture(scope="class", params=comfy_graph_list, ids=comfy_graph_ids, autouse=True)
     def _client_graph(self, request, args_pytest, _server) -> (ComfyClient, ComfyGraph):
         comfy_graph = request.param
-        
+
         # Start client
         comfy_client = self.start_client(args_pytest["listen"], args_pytest["port"])
 
@@ -203,22 +210,14 @@ class TestInference:
     def client(self, _client_graph):
         client = _client_graph[0]
         yield client
-    
+
     @fixture
     def comfy_graph(self, _client_graph):
         # avoid mutating the graph
         graph = deepcopy(_client_graph[1])
         yield graph
 
-    def test_comfy(
-        self,
-        client,
-        comfy_graph,
-        sampler,
-        scheduler,
-        prompt,
-        request
-    ):
+    def test_comfy(self, client, comfy_graph, sampler, scheduler, prompt, request):
         test_info = request.node.name
         comfy_graph.set_filename_prefix(test_info)
         # Settings for comfy graph
@@ -235,5 +234,3 @@ class TestInference:
             for image_data in images_output:
                 pil_image = Image.open(BytesIO(image_data))
                 assert numpy.array(pil_image).any() != 0, "Image is blank"
-
-

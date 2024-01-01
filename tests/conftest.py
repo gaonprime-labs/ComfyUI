@@ -1,11 +1,17 @@
 import os
 import pytest
 
+
 # Command line arguments for pytest
 def pytest_addoption(parser):
-    parser.addoption('--output_dir', action="store", default='tests/inference/samples', help='Output directory for generated images')
-    parser.addoption("--listen", type=str, default="127.0.0.1", metavar="IP", nargs="?", const="0.0.0.0", help="Specify the IP address to listen on (default: 127.0.0.1). If --listen is provided without an argument, it defaults to 0.0.0.0. (listens on all)")
+    parser.addoption('--output_dir', action="store", default='tests/inference/samples',
+                     help='Output directory for generated images')
+    parser.addoption(
+        "--listen", type=str, default="127.0.0.1", metavar="IP", nargs="?", const="0.0.0.0", help=
+        "Specify the IP address to listen on (default: 127.0.0.1). If --listen is provided without an argument, it defaults to 0.0.0.0. (listens on all)"
+    )
     parser.addoption("--port", type=int, default=8188, help="Set the listen port.")
+
 
 # This initializes args at the beginning of the test session
 @pytest.fixture(scope="session", autouse=True)
@@ -19,9 +25,10 @@ def args_pytest(pytestconfig):
 
     return args
 
+
 def pytest_collection_modifyitems(items):
     # Modifies items so tests run in the correct order
-    
+
     LAST_TESTS = ['test_quality']
 
     # Move the last items to the end
@@ -29,7 +36,7 @@ def pytest_collection_modifyitems(items):
     for test_name in LAST_TESTS:
         for item in items.copy():
             print(item.module.__name__, item)
-            if item.module.__name__  == test_name:
+            if item.module.__name__ == test_name:
                 last_items.append(item)
                 items.remove(item)
 

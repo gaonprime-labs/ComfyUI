@@ -25,6 +25,7 @@ import comfy.t2i_adapter.adapter
 import comfy.supported_models_base
 import comfy.taesd.taesd
 
+
 def load_model_weights(model, sd):
     m, u = model.load_state_dict(sd, strict=False)
     m = set(m)
@@ -39,10 +40,12 @@ def load_model_weights(model, sd):
         print("missing", m)
     return model
 
+
 def load_clip_weights(model, sd):
     k = list(sd.keys())
     for x in k:
-        if x.startswith("cond_stage_model.transformer.") and not x.startswith("cond_stage_model.transformer.text_model."):
+        if x.startswith("cond_stage_model.transformer."
+                        ) and not x.startswith("cond_stage_model.transformer.text_model."):
             y = x.replace("cond_stage_model.transformer.", "cond_stage_model.transformer.text_model.")
             sd[y] = sd.pop(x)
 
@@ -51,7 +54,8 @@ def load_clip_weights(model, sd):
         if ids.dtype == torch.float32:
             sd['cond_stage_model.transformer.text_model.embeddings.position_ids'] = ids.round()
 
-    sd = comfy.utils.transformers_convert(sd, "cond_stage_model.model.", "cond_stage_model.transformer.text_model.", 24)
+    sd = comfy.utils.transformers_convert(sd, "cond_stage_model.model.",
+                                          "cond_stage_model.transformer.text_model.", 24)
     return load_model_weights(model, sd)
 
 
@@ -101,7 +105,8 @@ class CLIP:
         self.cond_stage_model = clip(**(params))
 
         self.tokenizer = tokenizer(embedding_directory=embedding_directory)
-        self.patcher = comfy.model_patcher.ModelPatcher(self.cond_stage_model, load_device=load_device, offload_device=offload_device)
+        self.patcher = comfy.model_patcher.ModelPatcher(self.cond_stage_model, load_device=load_device,
+                                                        offload_device=offload_device)
         self.layer_idx = None
 
     def clone(self):
@@ -150,28 +155,59 @@ class CLIP:
     def get_key_patches(self):
         return self.patcher.get_key_patches()
 
+
 class VAE:
     def __init__(self, sd=None, device=None, config=None, dtype=None):
-        if 'decoder.up_blocks.0.resnets.0.norm1.weight' in sd.keys(): #diffusers format
+        if 'decoder.up_blocks.0.resnets.0.norm1.weight' in sd.keys():  #diffusers format
             sd = diffusers_convert.convert_vae_state_dict(sd)
 
-        self.memory_used_encode = lambda shape, dtype: (1767 * shape[2] * shape[3]) * model_management.dtype_size(dtype) #These are for AutoencoderKL and need tweaking (should be lower)
-        self.memory_used_decode = lambda shape, dtype: (2178 * shape[2] * shape[3] * 64) * model_management.dtype_size(dtype)
+        self.memory_used_encode = lambda shape, dtype: (1767*shape[2]*shape[3])*model_management.dtype_size(
+            dtype)  #These are for AutoencoderKL and need tweaking (should be lower)
+        self.memory_used_decode = lambda shape, dtype: (2178*shape[2]*shape[3]*64
+                                                        )*model_management.dtype_size(dtype)
 
         if config is None:
             if "decoder.mid.block_1.mix_factor" in sd:
-                encoder_config = {'double_z': True, 'z_channels': 4, 'resolution': 256, 'in_channels': 3, 'out_ch': 3, 'ch': 128, 'ch_mult': [1, 2, 4, 4], 'num_res_blocks': 2, 'attn_resolutions': [], 'dropout': 0.0}
+                encoder_config = {
+                    'double_z': True,
+                    'z_channels': 4,
+                    'resolution': 256,
+                    'in_channels': 3,
+                    'out_ch': 3,
+                    'ch': 128,
+                    'ch_mult': [1, 2, 4, 4],
+                    'num_res_blocks': 2,
+                    'attn_resolutions': [],
+                    'dropout': 0.0
+                }
                 decoder_config = encoder_config.copy()
                 decoder_config["video_kernel_size"] = [3, 1, 1]
                 decoder_config["alpha"] = 0.0
-                self.first_stage_model = AutoencodingEngine(regularizer_config={'target': "comfy.ldm.models.autoencoder.DiagonalGaussianRegularizer"},
-                                                            encoder_config={'target': "comfy.ldm.modules.diffusionmodules.model.Encoder", 'params': encoder_config},
-                                                            decoder_config={'target': "comfy.ldm.modules.temporal_ae.VideoDecoder", 'params': decoder_config})
+                self.first_stage_model = AutoencodingEngine(
+                    regularizer_config={'target': "comfy.ldm.models.autoencoder.DiagonalGaussianRegularizer"},
+                    encoder_config={
+                        'target': "comfy.ldm.modules.diffusionmodules.model.Encoder",
+                        'params': encoder_config
+                    }, decoder_config={
+                        'target': "comfy.ldm.modules.temporal_ae.VideoDecoder",
+                        'params': decoder_config
+                    })
             elif "taesd_decoder.1.weight" in sd:
                 self.first_stage_model = comfy.taesd.taesd.TAESD()
             else:
                 #default SD1.x/SD2.x VAE parameters
-                ddconfig = {'double_z': True, 'z_channels': 4, 'resolution': 256, 'in_channels': 3, 'out_ch': 3, 'ch': 128, 'ch_mult': [1, 2, 4, 4], 'num_res_blocks': 2, 'attn_resolutions': [], 'dropout': 0.0}
+                ddconfig = {
+                    'double_z': True,
+                    'z_channels': 4,
+                    'resolution': 256,
+                    'in_channels': 3,
+                    'out_ch': 3,
+                    'ch': 128,
+                    'ch_mult': [1, 2, 4, 4],
+                    'num_res_blocks': 2,
+                    'attn_resolutions': [],
+                    'dropout': 0.0
+                }
                 self.first_stage_model = AutoencoderKL(ddconfig=ddconfig, embed_dim=4)
         else:
             self.first_stage_model = AutoencoderKL(**(config['params']))
@@ -194,32 +230,50 @@ class VAE:
         self.first_stage_model.to(self.vae_dtype)
         self.output_device = model_management.intermediate_device()
 
-        self.patcher = comfy.model_patcher.ModelPatcher(self.first_stage_model, load_device=self.device, offload_device=offload_device)
+        self.patcher = comfy.model_patcher.ModelPatcher(self.first_stage_model, load_device=self.device,
+                                                        offload_device=offload_device)
 
-    def decode_tiled_(self, samples, tile_x=64, tile_y=64, overlap = 16):
-        steps = samples.shape[0] * comfy.utils.get_tiled_scale_steps(samples.shape[3], samples.shape[2], tile_x, tile_y, overlap)
-        steps += samples.shape[0] * comfy.utils.get_tiled_scale_steps(samples.shape[3], samples.shape[2], tile_x // 2, tile_y * 2, overlap)
-        steps += samples.shape[0] * comfy.utils.get_tiled_scale_steps(samples.shape[3], samples.shape[2], tile_x * 2, tile_y // 2, overlap)
+    def decode_tiled_(self, samples, tile_x=64, tile_y=64, overlap=16):
+        steps = samples.shape[0]*comfy.utils.get_tiled_scale_steps(samples.shape[3], samples.shape[2], tile_x,
+                                                                   tile_y, overlap)
+        steps += samples.shape[0]*comfy.utils.get_tiled_scale_steps(samples.shape[3], samples.shape[2],
+                                                                    tile_x//2, tile_y*2, overlap)
+        steps += samples.shape[0]*comfy.utils.get_tiled_scale_steps(samples.shape[3], samples.shape[2],
+                                                                    tile_x*2, tile_y//2, overlap)
         pbar = comfy.utils.ProgressBar(steps)
 
-        decode_fn = lambda a: (self.first_stage_model.decode(a.to(self.vae_dtype).to(self.device)) + 1.0).float()
-        output = torch.clamp((
-            (comfy.utils.tiled_scale(samples, decode_fn, tile_x // 2, tile_y * 2, overlap, upscale_amount = 8, output_device=self.output_device, pbar = pbar) +
-            comfy.utils.tiled_scale(samples, decode_fn, tile_x * 2, tile_y // 2, overlap, upscale_amount = 8, output_device=self.output_device, pbar = pbar) +
-             comfy.utils.tiled_scale(samples, decode_fn, tile_x, tile_y, overlap, upscale_amount = 8, output_device=self.output_device, pbar = pbar))
-            / 3.0) / 2.0, min=0.0, max=1.0)
+        decode_fn = lambda a: (self.first_stage_model.decode(a.to(self.vae_dtype).to(self.device)) + 1.0
+                               ).float()
+        output = torch.clamp(
+            ((comfy.utils.tiled_scale(samples, decode_fn, tile_x//2, tile_y*2, overlap, upscale_amount=8,
+                                      output_device=self.output_device, pbar=pbar) +
+              comfy.utils.tiled_scale(samples, decode_fn, tile_x*2, tile_y//2, overlap, upscale_amount=8,
+                                      output_device=self.output_device, pbar=pbar) +
+              comfy.utils.tiled_scale(samples, decode_fn, tile_x, tile_y, overlap, upscale_amount=8,
+                                      output_device=self.output_device, pbar=pbar))/3.0)/2.0, min=0.0,
+            max=1.0)
         return output
 
-    def encode_tiled_(self, pixel_samples, tile_x=512, tile_y=512, overlap = 64):
-        steps = pixel_samples.shape[0] * comfy.utils.get_tiled_scale_steps(pixel_samples.shape[3], pixel_samples.shape[2], tile_x, tile_y, overlap)
-        steps += pixel_samples.shape[0] * comfy.utils.get_tiled_scale_steps(pixel_samples.shape[3], pixel_samples.shape[2], tile_x // 2, tile_y * 2, overlap)
-        steps += pixel_samples.shape[0] * comfy.utils.get_tiled_scale_steps(pixel_samples.shape[3], pixel_samples.shape[2], tile_x * 2, tile_y // 2, overlap)
+    def encode_tiled_(self, pixel_samples, tile_x=512, tile_y=512, overlap=64):
+        steps = pixel_samples.shape[0]*comfy.utils.get_tiled_scale_steps(
+            pixel_samples.shape[3], pixel_samples.shape[2], tile_x, tile_y, overlap)
+        steps += pixel_samples.shape[0]*comfy.utils.get_tiled_scale_steps(
+            pixel_samples.shape[3], pixel_samples.shape[2], tile_x//2, tile_y*2, overlap)
+        steps += pixel_samples.shape[0]*comfy.utils.get_tiled_scale_steps(
+            pixel_samples.shape[3], pixel_samples.shape[2], tile_x*2, tile_y//2, overlap)
         pbar = comfy.utils.ProgressBar(steps)
 
-        encode_fn = lambda a: self.first_stage_model.encode((2. * a - 1.).to(self.vae_dtype).to(self.device)).float()
-        samples = comfy.utils.tiled_scale(pixel_samples, encode_fn, tile_x, tile_y, overlap, upscale_amount = (1/8), out_channels=4, output_device=self.output_device, pbar=pbar)
-        samples += comfy.utils.tiled_scale(pixel_samples, encode_fn, tile_x * 2, tile_y // 2, overlap, upscale_amount = (1/8), out_channels=4, output_device=self.output_device, pbar=pbar)
-        samples += comfy.utils.tiled_scale(pixel_samples, encode_fn, tile_x // 2, tile_y * 2, overlap, upscale_amount = (1/8), out_channels=4, output_device=self.output_device, pbar=pbar)
+        encode_fn = lambda a: self.first_stage_model.encode(
+            (2.*a - 1.).to(self.vae_dtype).to(self.device)).float()
+        samples = comfy.utils.tiled_scale(pixel_samples, encode_fn, tile_x, tile_y, overlap,
+                                          upscale_amount=(1/8), out_channels=4,
+                                          output_device=self.output_device, pbar=pbar)
+        samples += comfy.utils.tiled_scale(pixel_samples, encode_fn, tile_x*2, tile_y//2, overlap,
+                                           upscale_amount=(1/8), out_channels=4,
+                                           output_device=self.output_device, pbar=pbar)
+        samples += comfy.utils.tiled_scale(pixel_samples, encode_fn, tile_x//2, tile_y*2, overlap,
+                                           upscale_amount=(1/8), out_channels=4,
+                                           output_device=self.output_device, pbar=pbar)
         samples /= 3.0
         return samples
 
@@ -228,37 +282,43 @@ class VAE:
             memory_used = self.memory_used_decode(samples_in.shape, self.vae_dtype)
             model_management.load_models_gpu([self.patcher], memory_required=memory_used)
             free_memory = model_management.get_free_memory(self.device)
-            batch_number = int(free_memory / memory_used)
+            batch_number = int(free_memory/memory_used)
             batch_number = max(1, batch_number)
 
-            pixel_samples = torch.empty((samples_in.shape[0], 3, round(samples_in.shape[2] * 8), round(samples_in.shape[3] * 8)), device=self.output_device)
+            pixel_samples = torch.empty(
+                (samples_in.shape[0], 3, round(samples_in.shape[2]*8), round(samples_in.shape[3]*8)),
+                device=self.output_device)
             for x in range(0, samples_in.shape[0], batch_number):
-                samples = samples_in[x:x+batch_number].to(self.vae_dtype).to(self.device)
-                pixel_samples[x:x+batch_number] = torch.clamp((self.first_stage_model.decode(samples).to(self.output_device).float() + 1.0) / 2.0, min=0.0, max=1.0)
+                samples = samples_in[x:x + batch_number].to(self.vae_dtype).to(self.device)
+                pixel_samples[x:x + batch_number] = torch.clamp(
+                    (self.first_stage_model.decode(samples).to(self.output_device).float() + 1.0)/2.0,
+                    min=0.0, max=1.0)
         except model_management.OOM_EXCEPTION as e:
             print("Warning: Ran out of memory when regular VAE decoding, retrying with tiled VAE decoding.")
             pixel_samples = self.decode_tiled_(samples_in)
 
-        pixel_samples = pixel_samples.to(self.output_device).movedim(1,-1)
+        pixel_samples = pixel_samples.to(self.output_device).movedim(1, -1)
         return pixel_samples
 
-    def decode_tiled(self, samples, tile_x=64, tile_y=64, overlap = 16):
+    def decode_tiled(self, samples, tile_x=64, tile_y=64, overlap=16):
         model_management.load_model_gpu(self.patcher)
         output = self.decode_tiled_(samples, tile_x, tile_y, overlap)
-        return output.movedim(1,-1)
+        return output.movedim(1, -1)
 
     def encode(self, pixel_samples):
-        pixel_samples = pixel_samples.movedim(-1,1)
+        pixel_samples = pixel_samples.movedim(-1, 1)
         try:
             memory_used = self.memory_used_encode(pixel_samples.shape, self.vae_dtype)
             model_management.load_models_gpu([self.patcher], memory_required=memory_used)
             free_memory = model_management.get_free_memory(self.device)
-            batch_number = int(free_memory / memory_used)
+            batch_number = int(free_memory/memory_used)
             batch_number = max(1, batch_number)
-            samples = torch.empty((pixel_samples.shape[0], 4, round(pixel_samples.shape[2] // 8), round(pixel_samples.shape[3] // 8)), device=self.output_device)
+            samples = torch.empty((pixel_samples.shape[0], 4, round(
+                pixel_samples.shape[2]//8), round(pixel_samples.shape[3]//8)), device=self.output_device)
             for x in range(0, pixel_samples.shape[0], batch_number):
-                pixels_in = (2. * pixel_samples[x:x+batch_number] - 1.).to(self.vae_dtype).to(self.device)
-                samples[x:x+batch_number] = self.first_stage_model.encode(pixels_in).to(self.output_device).float()
+                pixels_in = (2.*pixel_samples[x:x + batch_number] - 1.).to(self.vae_dtype).to(self.device)
+                samples[x:x + batch_number] = self.first_stage_model.encode(pixels_in).to(
+                    self.output_device).float()
 
         except model_management.OOM_EXCEPTION as e:
             print("Warning: Ran out of memory when regular VAE encoding, retrying with tiled VAE encoding.")
@@ -266,14 +326,15 @@ class VAE:
 
         return samples
 
-    def encode_tiled(self, pixel_samples, tile_x=512, tile_y=512, overlap = 64):
+    def encode_tiled(self, pixel_samples, tile_x=512, tile_y=512, overlap=64):
         model_management.load_model_gpu(self.patcher)
-        pixel_samples = pixel_samples.movedim(-1,1)
+        pixel_samples = pixel_samples.movedim(-1, 1)
         samples = self.encode_tiled_(pixel_samples, tile_x=tile_x, tile_y=tile_y, overlap=overlap)
         return samples
 
     def get_sd(self):
         return self.first_stage_model.state_dict()
+
 
 class StyleModel:
     def __init__(self, model, device="cpu"):
@@ -287,7 +348,8 @@ def load_style_model(ckpt_path):
     model_data = comfy.utils.load_torch_file(ckpt_path, safe_load=True)
     keys = model_data.keys()
     if "style_embedding" in keys:
-        model = comfy.t2i_adapter.adapter.StyleAdapter(width=1024, context_dim=768, num_head=8, n_layes=3, num_token=8)
+        model = comfy.t2i_adapter.adapter.StyleAdapter(width=1024, context_dim=768, num_head=8, n_layes=3,
+                                                       num_token=8)
     else:
         raise Exception("invalid style model {}".format(ckpt_path))
     model.load_state_dict(model_data)
@@ -332,14 +394,18 @@ def load_clip(ckpt_paths, embedding_directory=None):
             print("clip unexpected:", u)
     return clip
 
+
 def load_gligen(ckpt_path):
     data = comfy.utils.load_torch_file(ckpt_path, safe_load=True)
     model = gligen.load_gligen(data)
     if model_management.should_use_fp16():
         model = model.half()
-    return comfy.model_patcher.ModelPatcher(model, load_device=model_management.get_torch_device(), offload_device=model_management.unet_offload_device())
+    return comfy.model_patcher.ModelPatcher(model, load_device=model_management.get_torch_device(),
+                                            offload_device=model_management.unet_offload_device())
 
-def load_checkpoint(config_path=None, ckpt_path=None, output_vae=True, output_clip=True, embedding_directory=None, state_dict=None, config=None):
+
+def load_checkpoint(config_path=None, ckpt_path=None, output_vae=True, output_clip=True,
+                    embedding_directory=None, state_dict=None, config=None):
     #TODO: this function is a mess and should be removed eventually
     if config is None:
         with open(config_path, 'r') as stream:
@@ -402,7 +468,8 @@ def load_checkpoint(config_path=None, ckpt_path=None, output_vae=True, output_cl
     model.load_model_weights(state_dict, "model.diffusion_model.")
 
     if output_vae:
-        vae_sd = comfy.utils.state_dict_prefix_replace(state_dict, {"first_stage_model.": ""}, filter_keys=True)
+        vae_sd = comfy.utils.state_dict_prefix_replace(state_dict, {"first_stage_model.": ""},
+                                                       filter_keys=True)
         vae = VAE(sd=vae_sd, config=vae_config)
 
     if output_clip:
@@ -421,9 +488,12 @@ def load_checkpoint(config_path=None, ckpt_path=None, output_vae=True, output_cl
             w.cond_stage_model = clip.cond_stage_model.clip_l
         load_clip_weights(w, state_dict)
 
-    return (comfy.model_patcher.ModelPatcher(model, load_device=model_management.get_torch_device(), offload_device=offload_device), clip, vae)
+    return (comfy.model_patcher.ModelPatcher(model, load_device=model_management.get_torch_device(),
+                                             offload_device=offload_device), clip, vae)
 
-def load_checkpoint_guess_config(ckpt_path, output_vae=True, output_clip=True, output_clipvision=False, embedding_directory=None, output_model=True):
+
+def load_checkpoint_guess_config(ckpt_path, output_vae=True, output_clip=True, output_clipvision=False,
+                                 embedding_directory=None, output_model=True):
     sd = comfy.utils.load_torch_file(ckpt_path)
     sd_keys = sd.keys()
     clip = None
@@ -476,7 +546,9 @@ def load_checkpoint_guess_config(ckpt_path, output_vae=True, output_clip=True, o
         print("left over keys:", left_over)
 
     if output_model:
-        model_patcher = comfy.model_patcher.ModelPatcher(model, load_device=load_device, offload_device=model_management.unet_offload_device(), current_device=inital_load_device)
+        model_patcher = comfy.model_patcher.ModelPatcher(
+            model, load_device=load_device, offload_device=model_management.unet_offload_device(),
+            current_device=inital_load_device)
         if inital_load_device != torch.device("cpu"):
             print("loaded straight to GPU")
             model_management.load_model_gpu(model_patcher)
@@ -484,19 +556,19 @@ def load_checkpoint_guess_config(ckpt_path, output_vae=True, output_clip=True, o
     return (model_patcher, clip, vae, clipvision)
 
 
-def load_unet_state_dict(sd): #load unet in diffusers format
+def load_unet_state_dict(sd):  #load unet in diffusers format
     parameters = comfy.utils.calculate_parameters(sd)
     unet_dtype = model_management.unet_dtype(model_params=parameters)
     load_device = model_management.get_torch_device()
     manual_cast_dtype = model_management.unet_manual_cast(unet_dtype, load_device)
 
-    if "input_blocks.0.0.weight" in sd: #ldm
+    if "input_blocks.0.0.weight" in sd:  #ldm
         model_config = model_detection.model_config_from_unet(sd, "", unet_dtype)
         if model_config is None:
             return None
         new_sd = sd
 
-    else: #diffusers
+    else:  #diffusers
         model_config = model_detection.model_config_from_diffusers_unet(sd, unet_dtype)
         if model_config is None:
             return None
@@ -519,6 +591,7 @@ def load_unet_state_dict(sd): #load unet in diffusers format
         print("left over keys in unet:", left_over)
     return comfy.model_patcher.ModelPatcher(model, load_device=load_device, offload_device=offload_device)
 
+
 def load_unet(unet_path):
     sd = comfy.utils.load_torch_file(unet_path)
     model = load_unet_state_dict(sd)
@@ -526,6 +599,7 @@ def load_unet(unet_path):
         print("ERROR UNSUPPORTED UNET", unet_path)
         raise RuntimeError("ERROR: Could not detect model type of: {}".format(unet_path))
     return model
+
 
 def save_checkpoint(output_path, model, clip, vae, metadata=None):
     model_management.load_models_gpu([model, clip.load_model()])

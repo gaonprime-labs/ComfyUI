@@ -1,10 +1,12 @@
 import comfy.options
+
 comfy.options.enable_args_parsing()
 
 import os
 import importlib.util
 import folder_paths
 import time
+
 
 def execute_prestartup_script():
     def execute_script(script_path):
@@ -25,7 +27,8 @@ def execute_prestartup_script():
 
         for possible_module in possible_modules:
             module_path = os.path.join(custom_node_path, possible_module)
-            if os.path.isfile(module_path) or module_path.endswith(".disabled") or module_path == "__pycache__":
+            if os.path.isfile(module_path) or module_path.endswith(
+                    ".disabled") or module_path == "__pycache__":
                 continue
 
             script_path = os.path.join(module_path, "prestartup_script.py")
@@ -43,8 +46,8 @@ def execute_prestartup_script():
             print("{:6.1f} seconds{}:".format(n[0], import_message), n[1])
         print()
 
-execute_prestartup_script()
 
+execute_prestartup_script()
 
 # Main code
 import asyncio
@@ -57,7 +60,8 @@ from comfy.cli_args import args
 
 if os.name == "nt":
     import logging
-    logging.getLogger("xformers").addFilter(lambda record: 'A matching Triton is not available' not in record.getMessage())
+    logging.getLogger("xformers").addFilter(
+        lambda record: 'A matching Triton is not available' not in record.getMessage())
 
 if __name__ == "__main__":
     if args.cuda_device is not None:
@@ -79,6 +83,7 @@ from server import BinaryEventTypes
 from nodes import init_custom_nodes
 import comfy.model_management
 
+
 def cuda_malloc_warning():
     device = comfy.model_management.get_torch_device()
     device_name = comfy.model_management.get_torch_device_name(device)
@@ -88,7 +93,10 @@ def cuda_malloc_warning():
             if b in device_name:
                 cuda_malloc_warning = True
         if cuda_malloc_warning:
-            print("\nWARNING: this card most likely does not support cuda-malloc, if you get \"CUDA error\" please run ComfyUI with: --disable-cuda-malloc\n")
+            print(
+                "\nWARNING: this card most likely does not support cuda-malloc, if you get \"CUDA error\" please run ComfyUI with: --disable-cuda-malloc\n"
+            )
+
 
 def prompt_worker(q, server):
     e = execution.PromptExecutor(server)
@@ -110,7 +118,7 @@ def prompt_worker(q, server):
             need_gc = True
             q.task_done(item_id, e.outputs_ui)
             if server.client_id is not None:
-                server.send_sync("executing", { "node": None, "prompt_id": prompt_id }, server.client_id)
+                server.send_sync("executing", {"node": None, "prompt_id": prompt_id}, server.client_id)
 
             current_time = time.perf_counter()
             execution_time = current_time - execution_start_time
@@ -124,6 +132,7 @@ def prompt_worker(q, server):
                 last_gc_collect = current_time
                 need_gc = False
 
+
 async def run(server, address='', port=8188, verbose=True, call_on_start=None):
     await asyncio.gather(server.start(address, port, verbose, call_on_start), server.publish_loop())
 
@@ -134,6 +143,7 @@ def hijack_progress(server):
         server.send_sync("progress", {"value": value, "max": total}, server.client_id)
         if preview_image is not None:
             server.send_sync(BinaryEventTypes.UNENCODED_PREVIEW_IMAGE, preview_image, server.client_id)
+
     comfy.utils.set_progress_bar_global_hook(hook)
 
 
@@ -176,7 +186,8 @@ if __name__ == "__main__":
     server = server.PromptServer(loop)
     q = execution.PromptQueue(server)
 
-    extra_model_paths_config_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "extra_model_paths.yaml")
+    extra_model_paths_config_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                                 "extra_model_paths.yaml")
     if os.path.isfile(extra_model_paths_config_path):
         load_extra_path_config(extra_model_paths_config_path)
 
@@ -191,7 +202,10 @@ if __name__ == "__main__":
     server.add_routes()
     hijack_progress(server)
 
-    threading.Thread(target=prompt_worker, daemon=True, args=(q, server,)).start()
+    threading.Thread(target=prompt_worker, daemon=True, args=(
+        q,
+        server,
+    )).start()
 
     if args.output_directory:
         output_dir = os.path.abspath(args.output_directory)
@@ -199,7 +213,8 @@ if __name__ == "__main__":
         folder_paths.set_output_directory(output_dir)
 
     #These are the default folders that checkpoints, clip and vae models will be saved to when using CheckpointSave, etc.. nodes
-    folder_paths.add_model_folder_path("checkpoints", os.path.join(folder_paths.get_output_directory(), "checkpoints"))
+    folder_paths.add_model_folder_path("checkpoints",
+                                       os.path.join(folder_paths.get_output_directory(), "checkpoints"))
     folder_paths.add_model_folder_path("clip", os.path.join(folder_paths.get_output_directory(), "clip"))
     folder_paths.add_model_folder_path("vae", os.path.join(folder_paths.get_output_directory(), "vae"))
 
@@ -213,15 +228,19 @@ if __name__ == "__main__":
 
     call_on_start = None
     if args.auto_launch:
+
         def startup_server(address, port):
             import webbrowser
             if os.name == 'nt' and address == '0.0.0.0':
                 address = '127.0.0.1'
             webbrowser.open(f"http://{address}:{port}")
+
         call_on_start = startup_server
 
     try:
-        loop.run_until_complete(run(server, address=args.listen, port=args.port, verbose=not args.dont_print_server, call_on_start=call_on_start))
+        loop.run_until_complete(
+            run(server, address=args.listen, port=args.port, verbose=not args.dont_print_server,
+                call_on_start=call_on_start))
     except KeyboardInterrupt:
         print("\nStopped server")
 

@@ -27,18 +27,7 @@ PyTorchSRModels = (
     SCUNet,
     DAT,
 )
-PyTorchSRModel = Union[
-    RealESRGANv2,
-    SPSR,
-    SwiftSRGAN,
-    ESRGAN,
-    SwinIR,
-    Swin2SR,
-    HAT,
-    OmniSR,
-    SCUNet,
-    DAT,
-]
+PyTorchSRModel = Union[RealESRGANv2, SPSR, SwiftSRGAN, ESRGAN, SwinIR, Swin2SR, HAT, OmniSR, SCUNet, DAT, ]
 
 
 def is_pytorch_sr_model(model: object):
@@ -53,7 +42,7 @@ def is_pytorch_face_model(model: object):
     return isinstance(model, PyTorchFaceModels)
 
 
-PyTorchInpaintModels = (LaMa,)
+PyTorchInpaintModels = (LaMa, )
 PyTorchInpaintModel = Union[LaMa]
 
 

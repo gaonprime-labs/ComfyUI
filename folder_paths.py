@@ -20,14 +20,19 @@ folder_names_and_paths["embeddings"] = ([os.path.join(models_dir, "embeddings")]
 folder_names_and_paths["diffusers"] = ([os.path.join(models_dir, "diffusers")], ["folder"])
 folder_names_and_paths["vae_approx"] = ([os.path.join(models_dir, "vae_approx")], supported_pt_extensions)
 
-folder_names_and_paths["controlnet"] = ([os.path.join(models_dir, "controlnet"), os.path.join(models_dir, "t2i_adapter")], supported_pt_extensions)
+folder_names_and_paths["controlnet"] = ([
+    os.path.join(models_dir, "controlnet"),
+    os.path.join(models_dir, "t2i_adapter")
+], supported_pt_extensions)
 folder_names_and_paths["gligen"] = ([os.path.join(models_dir, "gligen")], supported_pt_extensions)
 
-folder_names_and_paths["upscale_models"] = ([os.path.join(models_dir, "upscale_models")], supported_pt_extensions)
+folder_names_and_paths["upscale_models"] = ([os.path.join(models_dir,
+                                                          "upscale_models")], supported_pt_extensions)
 
 folder_names_and_paths["custom_nodes"] = ([os.path.join(base_path, "custom_nodes")], [])
 
-folder_names_and_paths["hypernetworks"] = ([os.path.join(models_dir, "hypernetworks")], supported_pt_extensions)
+folder_names_and_paths["hypernetworks"] = ([os.path.join(models_dir,
+                                                         "hypernetworks")], supported_pt_extensions)
 
 folder_names_and_paths["classifiers"] = ([os.path.join(models_dir, "classifiers")], {""})
 
@@ -43,25 +48,31 @@ if not os.path.exists(input_directory):
     except:
         print("Failed to create input directory")
 
+
 def set_output_directory(output_dir):
     global output_directory
     output_directory = output_dir
+
 
 def set_temp_directory(temp_dir):
     global temp_directory
     temp_directory = temp_dir
 
+
 def set_input_directory(input_dir):
     global input_directory
     input_directory = input_dir
+
 
 def get_output_directory():
     global output_directory
     return output_directory
 
+
 def get_temp_directory():
     global temp_directory
     return temp_directory
+
 
 def get_input_directory():
     global input_directory
@@ -126,8 +137,10 @@ def add_model_folder_path(folder_name, full_folder_path):
     else:
         folder_names_and_paths[folder_name] = ([full_folder_path], set())
 
+
 def get_folder_paths(folder_name):
     return folder_names_and_paths[folder_name][0][:]
+
 
 def recursive_search(directory, excluded_dir_names=None):
     if not os.path.isdir(directory):
@@ -148,9 +161,10 @@ def recursive_search(directory, excluded_dir_names=None):
             dirs[path] = os.path.getmtime(path)
     return result, dirs
 
-def filter_files_extensions(files, extensions):
-    return sorted(list(filter(lambda a: os.path.splitext(a)[-1].lower() in extensions or len(extensions) == 0, files)))
 
+def filter_files_extensions(files, extensions):
+    return sorted(
+        list(filter(lambda a: os.path.splitext(a)[-1].lower() in extensions or len(extensions) == 0, files)))
 
 
 def get_full_path(folder_name, filename):
@@ -166,6 +180,7 @@ def get_full_path(folder_name, filename):
 
     return None
 
+
 def get_filename_list_(folder_name):
     global folder_names_and_paths
     output_list = set()
@@ -177,6 +192,7 @@ def get_filename_list_(folder_name):
         output_folders = {**output_folders, **folders_all}
 
     return (sorted(list(output_list)), output_folders, time.perf_counter())
+
 
 def cached_filename_list_(folder_name):
     global filename_list_cache
@@ -200,6 +216,7 @@ def cached_filename_list_(folder_name):
 
     return out
 
+
 def get_filename_list(folder_name):
     out = cached_filename_list_(folder_name)
     if out is None:
@@ -207,6 +224,7 @@ def get_filename_list(folder_name):
         global filename_list_cache
         filename_list_cache[folder_name] = out
     return list(out[0])
+
 
 def get_save_image_path(filename_prefix, output_dir, image_width=0, image_height=0):
     def map_filename(filename):
@@ -234,12 +252,14 @@ def get_save_image_path(filename_prefix, output_dir, image_width=0, image_height
         err = "**** ERROR: Saving image outside the output folder is not allowed." + \
               "\n full_output_folder: " + os.path.abspath(full_output_folder) + \
               "\n         output_dir: " + output_dir + \
-              "\n         commonpath: " + os.path.commonpath((output_dir, os.path.abspath(full_output_folder))) 
+              "\n         commonpath: " + os.path.commonpath((output_dir, os.path.abspath(full_output_folder)))
         print(err)
         raise Exception(err)
 
     try:
-        counter = max(filter(lambda a: a[1][:-1] == filename and a[1][-1] == "_", map(map_filename, os.listdir(full_output_folder))))[0] + 1
+        counter = max(
+            filter(lambda a: a[1][:-1] == filename and a[1][-1] == "_",
+                   map(map_filename, os.listdir(full_output_folder))))[0] + 1
     except ValueError:
         counter = 1
     except FileNotFoundError:

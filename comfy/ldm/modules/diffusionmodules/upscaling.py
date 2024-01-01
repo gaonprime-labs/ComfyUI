@@ -14,8 +14,8 @@ class AbstractLowScaleModel(nn.Module):
         if noise_schedule_config is not None:
             self.register_schedule(**noise_schedule_config)
 
-    def register_schedule(self, beta_schedule="linear", timesteps=1000,
-                          linear_start=1e-4, linear_end=2e-2, cosine_s=8e-3):
+    def register_schedule(self, beta_schedule="linear", timesteps=1000, linear_start=1e-4, linear_end=2e-2,
+                          cosine_s=8e-3):
         betas = make_beta_schedule(beta_schedule, timesteps, linear_start=linear_start, linear_end=linear_end,
                                    cosine_s=cosine_s)
         alphas = 1. - betas
@@ -38,13 +38,14 @@ class AbstractLowScaleModel(nn.Module):
         self.register_buffer('sqrt_alphas_cumprod', to_torch(np.sqrt(alphas_cumprod)))
         self.register_buffer('sqrt_one_minus_alphas_cumprod', to_torch(np.sqrt(1. - alphas_cumprod)))
         self.register_buffer('log_one_minus_alphas_cumprod', to_torch(np.log(1. - alphas_cumprod)))
-        self.register_buffer('sqrt_recip_alphas_cumprod', to_torch(np.sqrt(1. / alphas_cumprod)))
-        self.register_buffer('sqrt_recipm1_alphas_cumprod', to_torch(np.sqrt(1. / alphas_cumprod - 1)))
+        self.register_buffer('sqrt_recip_alphas_cumprod', to_torch(np.sqrt(1./alphas_cumprod)))
+        self.register_buffer('sqrt_recipm1_alphas_cumprod', to_torch(np.sqrt(1./alphas_cumprod - 1)))
 
     def q_sample(self, x_start, t, noise=None):
         noise = default(noise, lambda: torch.randn_like(x_start))
-        return (extract_into_tensor(self.sqrt_alphas_cumprod.to(x_start.device), t, x_start.shape) * x_start +
-                extract_into_tensor(self.sqrt_one_minus_alphas_cumprod.to(x_start.device), t, x_start.shape) * noise)
+        return (extract_into_tensor(self.sqrt_alphas_cumprod.to(x_start.device), t, x_start.shape)*x_start +
+                extract_into_tensor(self.sqrt_one_minus_alphas_cumprod.to(x_start.device), t, x_start.shape)*
+                noise)
 
     def forward(self, x):
         return x, None
@@ -71,11 +72,8 @@ class ImageConcatWithNoiseAugmentation(AbstractLowScaleModel):
 
     def forward(self, x, noise_level=None):
         if noise_level is None:
-            noise_level = torch.randint(0, self.max_noise_level, (x.shape[0],), device=x.device).long()
+            noise_level = torch.randint(0, self.max_noise_level, (x.shape[0], ), device=x.device).long()
         else:
             assert isinstance(noise_level, torch.Tensor)
         z = self.q_sample(x, noise_level)
         return z, noise_level
-
-
-

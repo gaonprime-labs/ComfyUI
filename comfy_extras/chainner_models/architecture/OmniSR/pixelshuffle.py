@@ -13,16 +13,14 @@
 import torch.nn as nn
 
 
-def pixelshuffle_block(
-    in_channels, out_channels, upscale_factor=2, kernel_size=3, bias=False
-):
+def pixelshuffle_block(in_channels, out_channels, upscale_factor=2, kernel_size=3, bias=False):
     """
     Upsample features according to `upscale_factor`.
     """
-    padding = kernel_size // 2
+    padding = kernel_size//2
     conv = nn.Conv2d(
         in_channels,
-        out_channels * (upscale_factor**2),
+        out_channels*(upscale_factor**2),
         kernel_size,
         padding=1,
         bias=bias,

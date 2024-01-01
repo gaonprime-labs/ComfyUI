@@ -23,7 +23,7 @@ def append_dims(x, target_dims):
     dims_to_append = target_dims - x.ndim
     if dims_to_append < 0:
         raise ValueError(f'input has {x.ndim} dims but target_dims is {target_dims}, which is less')
-    expanded = x[(...,) + (None,) * dims_to_append]
+    expanded = x[(..., ) + (None, )*dims_to_append]
     # MPS will get inf values if it tries to index into the new axes, but detaching fixes this.
     # https://github.com/pytorch/pytorch/issues/84364
     return expanded.detach().clone() if expanded.device.type == 'mps' else expanded
@@ -100,9 +100,7 @@ class EMAWarmup:
         start_at (int): The epoch to start averaging at. Default: 0.
         last_epoch (int): The index of last epoch. Default: 0.
     """
-
-    def __init__(self, inv_gamma=1., power=1., min_value=0., max_value=1., start_at=0,
-                 last_epoch=0):
+    def __init__(self, inv_gamma=1., power=1., min_value=0., max_value=1., start_at=0, last_epoch=0):
         self.inv_gamma = inv_gamma
         self.power = power
         self.min_value = min_value
@@ -125,7 +123,7 @@ class EMAWarmup:
     def get_value(self):
         """Gets the current EMA decay rate."""
         epoch = max(0, self.last_epoch - self.start_at)
-        value = 1 - (1 + epoch / self.inv_gamma) ** -self.power
+        value = 1 - (1 + epoch/self.inv_gamma)**-self.power
         return 0. if epoch < 0 else min(self.max_value, max(self.min_value, value))
 
     def step(self):
@@ -149,9 +147,7 @@ class InverseLR(optim.lr_scheduler._LRScheduler):
         verbose (bool): If ``True``, prints a message to stdout for
             each update. Default: ``False``.
     """
-
-    def __init__(self, optimizer, inv_gamma=1., power=1., warmup=0., min_lr=0.,
-                 last_epoch=-1, verbose=False):
+    def __init__(self, optimizer, inv_gamma=1., power=1., warmup=0., min_lr=0., last_epoch=-1, verbose=False):
         self.inv_gamma = inv_gamma
         self.power = power
         if not 0. <= warmup < 1:
@@ -168,10 +164,9 @@ class InverseLR(optim.lr_scheduler._LRScheduler):
         return self._get_closed_form_lr()
 
     def _get_closed_form_lr(self):
-        warmup = 1 - self.warmup ** (self.last_epoch + 1)
-        lr_mult = (1 + self.last_epoch / self.inv_gamma) ** -self.power
-        return [warmup * max(self.min_lr, base_lr * lr_mult)
-                for base_lr in self.base_lrs]
+        warmup = 1 - self.warmup**(self.last_epoch + 1)
+        lr_mult = (1 + self.last_epoch/self.inv_gamma)**-self.power
+        return [warmup*max(self.min_lr, base_lr*lr_mult) for base_lr in self.base_lrs]
 
 
 class ExponentialLR(optim.lr_scheduler._LRScheduler):
@@ -190,9 +185,7 @@ class ExponentialLR(optim.lr_scheduler._LRScheduler):
         verbose (bool): If ``True``, prints a message to stdout for
             each update. Default: ``False``.
     """
-
-    def __init__(self, optimizer, num_steps, decay=0.5, warmup=0., min_lr=0.,
-                 last_epoch=-1, verbose=False):
+    def __init__(self, optimizer, num_steps, decay=0.5, warmup=0., min_lr=0., last_epoch=-1, verbose=False):
         self.num_steps = num_steps
         self.decay = decay
         if not 0. <= warmup < 1:
@@ -209,24 +202,24 @@ class ExponentialLR(optim.lr_scheduler._LRScheduler):
         return self._get_closed_form_lr()
 
     def _get_closed_form_lr(self):
-        warmup = 1 - self.warmup ** (self.last_epoch + 1)
-        lr_mult = (self.decay ** (1 / self.num_steps)) ** self.last_epoch
-        return [warmup * max(self.min_lr, base_lr * lr_mult)
-                for base_lr in self.base_lrs]
+        warmup = 1 - self.warmup**(self.last_epoch + 1)
+        lr_mult = (self.decay**(1/self.num_steps))**self.last_epoch
+        return [warmup*max(self.min_lr, base_lr*lr_mult) for base_lr in self.base_lrs]
 
 
 def rand_log_normal(shape, loc=0., scale=1., device='cpu', dtype=torch.float32):
     """Draws samples from an lognormal distribution."""
-    return (torch.randn(shape, device=device, dtype=dtype) * scale + loc).exp()
+    return (torch.randn(shape, device=device, dtype=dtype)*scale + loc).exp()
 
 
-def rand_log_logistic(shape, loc=0., scale=1., min_value=0., max_value=float('inf'), device='cpu', dtype=torch.float32):
+def rand_log_logistic(shape, loc=0., scale=1., min_value=0., max_value=float('inf'), device='cpu',
+                      dtype=torch.float32):
     """Draws samples from an optionally truncated log-logistic distribution."""
     min_value = torch.as_tensor(min_value, device=device, dtype=torch.float64)
     max_value = torch.as_tensor(max_value, device=device, dtype=torch.float64)
     min_cdf = min_value.log().sub(loc).div(scale).sigmoid()
     max_cdf = max_value.log().sub(loc).div(scale).sigmoid()
-    u = torch.rand(shape, device=device, dtype=torch.float64) * (max_cdf - min_cdf) + min_cdf
+    u = torch.rand(shape, device=device, dtype=torch.float64)*(max_cdf - min_cdf) + min_cdf
     return u.logit().mul(scale).add(loc).exp().to(dtype)
 
 
@@ -234,24 +227,25 @@ def rand_log_uniform(shape, min_value, max_value, device='cpu', dtype=torch.floa
     """Draws samples from an log-uniform distribution."""
     min_value = math.log(min_value)
     max_value = math.log(max_value)
-    return (torch.rand(shape, device=device, dtype=dtype) * (max_value - min_value) + min_value).exp()
+    return (torch.rand(shape, device=device, dtype=dtype)*(max_value - min_value) + min_value).exp()
 
 
-def rand_v_diffusion(shape, sigma_data=1., min_value=0., max_value=float('inf'), device='cpu', dtype=torch.float32):
+def rand_v_diffusion(shape, sigma_data=1., min_value=0., max_value=float('inf'), device='cpu',
+                     dtype=torch.float32):
     """Draws samples from a truncated v-diffusion training timestep distribution."""
-    min_cdf = math.atan(min_value / sigma_data) * 2 / math.pi
-    max_cdf = math.atan(max_value / sigma_data) * 2 / math.pi
-    u = torch.rand(shape, device=device, dtype=dtype) * (max_cdf - min_cdf) + min_cdf
-    return torch.tan(u * math.pi / 2) * sigma_data
+    min_cdf = math.atan(min_value/sigma_data)*2/math.pi
+    max_cdf = math.atan(max_value/sigma_data)*2/math.pi
+    u = torch.rand(shape, device=device, dtype=dtype)*(max_cdf - min_cdf) + min_cdf
+    return torch.tan(u*math.pi/2)*sigma_data
 
 
 def rand_split_log_normal(shape, loc, scale_1, scale_2, device='cpu', dtype=torch.float32):
     """Draws samples from a split lognormal distribution."""
     n = torch.randn(shape, device=device, dtype=dtype).abs()
     u = torch.rand(shape, device=device, dtype=dtype)
-    n_left = n * -scale_1 + loc
-    n_right = n * scale_2 + loc
-    ratio = scale_1 / (scale_1 + scale_2)
+    n_left = n* -scale_1 + loc
+    n_right = n*scale_2 + loc
+    ratio = scale_1/(scale_1 + scale_2)
     return torch.where(u < ratio, n_left, n_right).exp()
 
 
@@ -265,7 +259,8 @@ class FolderOfImages(data.Dataset):
         super().__init__()
         self.root = Path(root)
         self.transform = nn.Identity() if transform is None else transform
-        self.paths = sorted(path for path in self.root.rglob('*') if path.suffix.lower() in self.IMG_EXTENSIONS)
+        self.paths = sorted(path for path in self.root.rglob('*')
+                            if path.suffix.lower() in self.IMG_EXTENSIONS)
 
     def __repr__(self):
         return f'FolderOfImages(root="{self.root}", len: {len(self)})'

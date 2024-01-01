@@ -70,9 +70,7 @@ class SPSRNet(nn.Module):
         if self.scale == 3:
             n_upscale = 1
 
-        fea_conv = B.conv_block(
-            self.in_nc, self.num_filters, kernel_size=3, norm_type=None, act_type=None
-        )
+        fea_conv = B.conv_block(self.in_nc, self.num_filters, kernel_size=3, norm_type=None, act_type=None)
         rb_blocks = [
             B.RRDB(
                 self.num_filters,
@@ -84,8 +82,7 @@ class SPSRNet(nn.Module):
                 norm_type=norm,
                 act_type=act,
                 mode="CNA",
-            )
-            for _ in range(self.num_blocks)
+            ) for _ in range(self.num_blocks)
         ]
         LR_conv = B.conv_block(
             self.num_filters,
@@ -103,13 +100,10 @@ class SPSRNet(nn.Module):
         else:
             raise NotImplementedError(f"upsample mode [{upsampler}] is not found")
         if self.scale == 3:
-            a_upsampler = upsample_block(
-                self.num_filters, self.num_filters, 3, act_type=act
-            )
+            a_upsampler = upsample_block(self.num_filters, self.num_filters, 3, act_type=act)
         else:
             a_upsampler = [
-                upsample_block(self.num_filters, self.num_filters, act_type=act)
-                for _ in range(n_upscale)
+                upsample_block(self.num_filters, self.num_filters, act_type=act) for _ in range(n_upscale)
             ]
         self.HR_conv0_new = B.conv_block(
             self.num_filters,
@@ -135,19 +129,18 @@ class SPSRNet(nn.Module):
 
         self.get_g_nopadding = Get_gradient_nopadding()
 
-        self.b_fea_conv = B.conv_block(
-            self.in_nc, self.num_filters, kernel_size=3, norm_type=None, act_type=None
-        )
+        self.b_fea_conv = B.conv_block(self.in_nc, self.num_filters, kernel_size=3, norm_type=None,
+                                       act_type=None)
 
         self.b_concat_1 = B.conv_block(
-            2 * self.num_filters,
+            2*self.num_filters,
             self.num_filters,
             kernel_size=3,
             norm_type=None,
             act_type=None,
         )
         self.b_block_1 = B.RRDB(
-            self.num_filters * 2,
+            self.num_filters*2,
             kernel_size=3,
             gc=32,
             stride=1,
@@ -159,14 +152,14 @@ class SPSRNet(nn.Module):
         )
 
         self.b_concat_2 = B.conv_block(
-            2 * self.num_filters,
+            2*self.num_filters,
             self.num_filters,
             kernel_size=3,
             norm_type=None,
             act_type=None,
         )
         self.b_block_2 = B.RRDB(
-            self.num_filters * 2,
+            self.num_filters*2,
             kernel_size=3,
             gc=32,
             stride=1,
@@ -178,14 +171,14 @@ class SPSRNet(nn.Module):
         )
 
         self.b_concat_3 = B.conv_block(
-            2 * self.num_filters,
+            2*self.num_filters,
             self.num_filters,
             kernel_size=3,
             norm_type=None,
             act_type=None,
         )
         self.b_block_3 = B.RRDB(
-            self.num_filters * 2,
+            self.num_filters*2,
             kernel_size=3,
             gc=32,
             stride=1,
@@ -197,14 +190,14 @@ class SPSRNet(nn.Module):
         )
 
         self.b_concat_4 = B.conv_block(
-            2 * self.num_filters,
+            2*self.num_filters,
             self.num_filters,
             kernel_size=3,
             norm_type=None,
             act_type=None,
         )
         self.b_block_4 = B.RRDB(
-            self.num_filters * 2,
+            self.num_filters*2,
             kernel_size=3,
             gc=32,
             stride=1,
@@ -231,13 +224,10 @@ class SPSRNet(nn.Module):
         else:
             raise NotImplementedError(f"upsample mode [{upsampler}] is not found")
         if self.scale == 3:
-            b_upsampler = upsample_block(
-                self.num_filters, self.num_filters, 3, act_type=act
-            )
+            b_upsampler = upsample_block(self.num_filters, self.num_filters, 3, act_type=act)
         else:
             b_upsampler = [
-                upsample_block(self.num_filters, self.num_filters, act_type=act)
-                for _ in range(n_upscale)
+                upsample_block(self.num_filters, self.num_filters, act_type=act) for _ in range(n_upscale)
             ]
 
         b_HR_conv0 = B.conv_block(
@@ -257,12 +247,11 @@ class SPSRNet(nn.Module):
 
         self.b_module = B.sequential(*b_upsampler, b_HR_conv0, b_HR_conv1)
 
-        self.conv_w = B.conv_block(
-            self.num_filters, self.out_nc, kernel_size=1, norm_type=None, act_type=None
-        )
+        self.conv_w = B.conv_block(self.num_filters, self.out_nc, kernel_size=1, norm_type=None,
+                                   act_type=None)
 
         self.f_concat = B.conv_block(
-            self.num_filters * 2,
+            self.num_filters*2,
             self.num_filters,
             kernel_size=3,
             norm_type=None,
@@ -270,7 +259,7 @@ class SPSRNet(nn.Module):
         )
 
         self.f_block = B.RRDB(
-            self.num_filters * 2,
+            self.num_filters*2,
             kernel_size=3,
             gc=32,
             stride=1,
@@ -288,9 +277,8 @@ class SPSRNet(nn.Module):
             norm_type=None,
             act_type=act,
         )
-        self.f_HR_conv1 = B.conv_block(
-            self.num_filters, self.out_nc, kernel_size=3, norm_type=None, act_type=None
-        )
+        self.f_HR_conv1 = B.conv_block(self.num_filters, self.out_nc, kernel_size=3, norm_type=None,
+                                       act_type=None)
 
         self.load_state_dict(self.state, strict=False)
 

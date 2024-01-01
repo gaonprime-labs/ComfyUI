@@ -29,9 +29,7 @@ def act(act_type: str, inplace=True, neg_slope=0.2, n_prelu=1):
     elif act_type == "prelu":
         layer = nn.PReLU(num_parameters=n_prelu, init=neg_slope)
     else:
-        raise NotImplementedError(
-            "activation layer [{:s}] is not found".format(act_type)
-        )
+        raise NotImplementedError("activation layer [{:s}] is not found".format(act_type))
     return layer
 
 
@@ -43,9 +41,7 @@ def norm(norm_type: str, nc: int):
     elif norm_type == "instance":
         layer = nn.InstanceNorm2d(nc, affine=False)
     else:
-        raise NotImplementedError(
-            "normalization layer [{:s}] is not found".format(norm_type)
-        )
+        raise NotImplementedError("normalization layer [{:s}] is not found".format(norm_type))
     return layer
 
 
@@ -60,15 +56,13 @@ def pad(pad_type: str, padding):
     elif pad_type == "replicate":
         layer = nn.ReplicationPad2d(padding)
     else:
-        raise NotImplementedError(
-            "padding layer [{:s}] is not implemented".format(pad_type)
-        )
+        raise NotImplementedError("padding layer [{:s}] is not implemented".format(pad_type))
     return layer
 
 
 def get_valid_padding(kernel_size, dilation):
-    kernel_size = kernel_size + (kernel_size - 1) * (dilation - 1)
-    padding = (kernel_size - 1) // 2
+    kernel_size = kernel_size + (kernel_size - 1)*(dilation - 1)
+    padding = (kernel_size - 1)//2
     return padding
 
 
@@ -220,7 +214,6 @@ class ResNetBlock(nn.Module):
     with extra residual scaling used in EDSR
     (Enhanced Deep Residual Networks for Single Image Super-Resolution, CVPRW 17)
     """
-
     def __init__(
         self,
         in_nc,
@@ -288,7 +281,6 @@ class RRDB(nn.Module):
     Residual in Residual Dense Block
     (ESRGAN: Enhanced Super-Resolution Generative Adversarial Networks)
     """
-
     def __init__(
         self,
         nf,
@@ -350,7 +342,7 @@ class RRDB(nn.Module):
         out = self.RDB1(x)
         out = self.RDB2(out)
         out = self.RDB3(out)
-        return out * 0.2 + x
+        return out*0.2 + x
 
 
 class ResidualDenseBlock_5C(nn.Module):
@@ -374,7 +366,6 @@ class ResidualDenseBlock_5C(nn.Module):
         plus (bool): enable the additional residual paths from ESRGAN+
             (adds trainable parameters)
     """
-
     def __init__(
         self,
         nf=64,
@@ -420,7 +411,7 @@ class ResidualDenseBlock_5C(nn.Module):
             c2x2=c2x2,
         )
         self.conv3 = conv_block(
-            nf + 2 * gc,
+            nf + 2*gc,
             gc,
             kernel_size,
             stride,
@@ -432,7 +423,7 @@ class ResidualDenseBlock_5C(nn.Module):
             c2x2=c2x2,
         )
         self.conv4 = conv_block(
-            nf + 3 * gc,
+            nf + 3*gc,
             gc,
             kernel_size,
             stride,
@@ -448,7 +439,7 @@ class ResidualDenseBlock_5C(nn.Module):
         else:
             last_act = act_type
         self.conv5 = conv_block(
-            nf + 4 * gc,
+            nf + 4*gc,
             nf,
             3,
             stride,
@@ -471,7 +462,7 @@ class ResidualDenseBlock_5C(nn.Module):
         if self.conv1x1:
             x4 = x4 + x2  # +
         x5 = self.conv5(torch.cat((x, x1, x2, x3, x4), 1))
-        return x5 * 0.2 + x
+        return x5*0.2 + x
 
 
 def conv1x1(in_planes, out_planes, stride=1):
@@ -501,7 +492,7 @@ def pixelshuffle_block(
     """
     conv = conv_block(
         in_nc,
-        out_nc * (upscale_factor**2),
+        out_nc*(upscale_factor**2),
         kernel_size,
         stride,
         bias=bias,

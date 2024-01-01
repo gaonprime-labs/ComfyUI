@@ -52,8 +52,8 @@ class RRDBNet(nn.Module):
         self.state_map = {
             # currently supports old, new, and newer RRDBNet arch models
             # ESRGAN, BSRGAN/RealSR, Real-ESRGAN
-            "model.0.weight": ("conv_first.weight",),
-            "model.0.bias": ("conv_first.bias",),
+            "model.0.weight": ("conv_first.weight", ),
+            "model.0.bias": ("conv_first.bias", ),
             "model.1.sub./NB/.weight": ("trunk_conv.weight", "conv_body.weight"),
             "model.1.sub./NB/.bias": ("trunk_conv.bias", "conv_body.bias"),
             r"model.1.sub.\1.RDB\2.conv\3.0.\4": (
@@ -82,7 +82,7 @@ class RRDBNet(nn.Module):
         c2x2 = False
         if self.state["model.0.weight"].shape[-2] == 2:
             c2x2 = True
-            self.scale = round(math.sqrt(self.scale / 4))
+            self.scale = round(math.sqrt(self.scale/4))
             self.model_arch = "ESRGAN-2c2"
 
         self.supports_fp16 = True
@@ -90,11 +90,11 @@ class RRDBNet(nn.Module):
         self.min_size_restriction = None
 
         # Detect if pixelunshuffle was used (Real-ESRGAN)
-        if self.in_nc in (self.out_nc * 4, self.out_nc * 16) and self.out_nc in (
-            self.in_nc / 4,
-            self.in_nc / 16,
+        if self.in_nc in (self.out_nc*4, self.out_nc*16) and self.out_nc in (
+                self.in_nc/4,
+                self.in_nc/16,
         ):
-            self.shuffle_factor = int(math.sqrt(self.in_nc / self.out_nc))
+            self.shuffle_factor = int(math.sqrt(self.in_nc/self.out_nc))
         else:
             self.shuffle_factor = None
 
@@ -120,8 +120,7 @@ class RRDBNet(nn.Module):
                     out_nc=self.num_filters,
                     act_type=self.act,
                     c2x2=c2x2,
-                )
-                for _ in range(int(math.log(self.scale, 2)))
+                ) for _ in range(int(math.log(self.scale, 2)))
             ]
 
         self.model = B.sequential(
@@ -150,8 +149,7 @@ class RRDBNet(nn.Module):
                             mode="CNA",
                             plus=self.plus,
                             c2x2=c2x2,
-                        )
-                        for _ in range(self.num_blocks)
+                        ) for _ in range(self.num_blocks)
                     ],
                     # lr conv
                     B.conv_block(
@@ -163,8 +161,7 @@ class RRDBNet(nn.Module):
                         mode=self.mode,
                         c2x2=c2x2,
                     ),
-                )
-            ),
+                )),
             *upsample_blocks,
             # hr_conv0
             B.conv_block(
@@ -205,8 +202,7 @@ class RRDBNet(nn.Module):
         # add nb to state keys
         for kind in ("weight", "bias"):
             self.state_map[f"model.1.sub.{self.num_blocks}.{kind}"] = self.state_map[
-                f"model.1.sub./NB/.{kind}"
-            ]
+                f"model.1.sub./NB/.{kind}"]
             del self.state_map[f"model.1.sub./NB/.{kind}"]
 
         old_state = OrderedDict()
@@ -228,7 +224,7 @@ class RRDBNet(nn.Module):
             if match is not None:
                 _, key_num, key_type = match.groups()
                 old_state[f"model.{int(key_num) * 3}.{key_type}"] = state[key]
-                max_upconv = max(max_upconv, int(key_num) * 3)
+                max_upconv = max(max_upconv, int(key_num)*3)
 
         # final layers
         for key in state.keys():
@@ -236,9 +232,9 @@ class RRDBNet(nn.Module):
                 old_state[f"model.{max_upconv + 2}.weight"] = state[key]
             elif key in ("HRconv.bias", "conv_hr.bias"):
                 old_state[f"model.{max_upconv + 2}.bias"] = state[key]
-            elif key in ("conv_last.weight",):
+            elif key in ("conv_last.weight", ):
                 old_state[f"model.{max_upconv + 4}.weight"] = state[key]
-            elif key in ("conv_last.bias",):
+            elif key in ("conv_last.bias", ):
                 old_state[f"model.{max_upconv + 4}.bias"] = state[key]
 
         # Sort by first numeric value of each layer
@@ -269,8 +265,7 @@ class RRDBNet(nn.Module):
     def get_num_blocks(self) -> int:
         nbs = []
         state_keys = self.state_map[r"model.1.sub.\1.RDB\2.conv\3.0.\4"] + (
-            r"model\.\d+\.sub\.(\d+)\.RDB(\d+)\.conv(\d+)\.0\.(weight|bias)",
-        )
+            r"model\.\d+\.sub\.(\d+)\.RDB(\d+)\.conv(\d+)\.0\.(weight|bias)", )
         for state_key in state_keys:
             for k in self.state:
                 m = re.search(state_key, k)
@@ -283,14 +278,10 @@ class RRDBNet(nn.Module):
     def forward(self, x):
         if self.shuffle_factor:
             _, _, h, w = x.size()
-            mod_pad_h = (
-                self.shuffle_factor - h % self.shuffle_factor
-            ) % self.shuffle_factor
-            mod_pad_w = (
-                self.shuffle_factor - w % self.shuffle_factor
-            ) % self.shuffle_factor
+            mod_pad_h = (self.shuffle_factor - h % self.shuffle_factor) % self.shuffle_factor
+            mod_pad_w = (self.shuffle_factor - w % self.shuffle_factor) % self.shuffle_factor
             x = F.pad(x, (0, mod_pad_w, 0, mod_pad_h), "reflect")
             x = torch.pixel_unshuffle(x, downscale_factor=self.shuffle_factor)
             x = self.model(x)
-            return x[:, :, : h * self.scale, : w * self.scale]
+            return x[:, :, :h*self.scale, :w*self.scale]
         return self.model(x)

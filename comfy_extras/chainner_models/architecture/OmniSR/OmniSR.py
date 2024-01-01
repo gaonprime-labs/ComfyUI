@@ -39,11 +39,9 @@ class OmniSR(nn.Module):
         num_out_ch = num_in_ch  # we can just assume this for now. pixelshuffle smh
 
         pixelshuffle_shape = state_dict["up.0.weight"].shape[0]
-        up_scale = math.sqrt(pixelshuffle_shape / num_out_ch)
+        up_scale = math.sqrt(pixelshuffle_shape/num_out_ch)
         if up_scale - int(up_scale) > 0:
-            print(
-                "out_nc is probably different than in_nc, scale calculation might be wrong"
-            )
+            print("out_nc is probably different than in_nc, scale calculation might be wrong")
         up_scale = int(up_scale)
         res_num = 0
         for key in state_dict.keys():
@@ -56,14 +54,10 @@ class OmniSR(nn.Module):
         residual_layer = []
         self.res_num = res_num
 
-        if (
-            "residual_layer.0.residual_layer.0.layer.2.fn.rel_pos_bias.weight"
-            in state_dict.keys()
-        ):
+        if ("residual_layer.0.residual_layer.0.layer.2.fn.rel_pos_bias.weight" in state_dict.keys()):
             rel_pos_bias_weight = state_dict[
-                "residual_layer.0.residual_layer.0.layer.2.fn.rel_pos_bias.weight"
-            ].shape[0]
-            self.window_size = int((math.sqrt(rel_pos_bias_weight) + 1) / 2)
+                "residual_layer.0.residual_layer.0.layer.2.fn.rel_pos_bias.weight"].shape[0]
+            self.window_size = int((math.sqrt(rel_pos_bias_weight) + 1)/2)
         else:
             self.window_size = 8
 
@@ -139,5 +133,5 @@ class OmniSR(nn.Module):
         out = torch.add(self.output(out), residual)
         out = self.up(out)
 
-        out = out[:, :, : H * self.up_scale, : W * self.up_scale]
+        out = out[:, :, :H*self.up_scale, :W*self.up_scale]
         return out

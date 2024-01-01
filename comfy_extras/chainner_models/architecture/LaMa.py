@@ -19,7 +19,7 @@ class LearnableSpatialTransformWrapper(nn.Module):
     def __init__(self, impl, pad_coef=0.5, angle_init_range=80, train_angle=True):
         super().__init__()
         self.impl = impl
-        self.angle = torch.rand(1) * angle_init_range
+        self.angle = torch.rand(1)*angle_init_range
         if train_angle:
             self.angle = nn.Parameter(self.angle, requires_grad=True)
         self.pad_coef = pad_coef
@@ -30,25 +30,21 @@ class LearnableSpatialTransformWrapper(nn.Module):
         elif isinstance(x, tuple):
             x_trans = tuple(self.transform(elem) for elem in x)
             y_trans = self.impl(x_trans)
-            return tuple(
-                self.inverse_transform(elem, orig_x) for elem, orig_x in zip(y_trans, x)
-            )
+            return tuple(self.inverse_transform(elem, orig_x) for elem, orig_x in zip(y_trans, x))
         else:
             raise ValueError(f"Unexpected input type {type(x)}")
 
     def transform(self, x):
         height, width = x.shape[2:]
-        pad_h, pad_w = int(height * self.pad_coef), int(width * self.pad_coef)
+        pad_h, pad_w = int(height*self.pad_coef), int(width*self.pad_coef)
         x_padded = F.pad(x, [pad_w, pad_w, pad_h, pad_h], mode="reflect")
-        x_padded_rotated = rotate(
-            x_padded, self.angle.to(x_padded), InterpolationMode.BILINEAR, fill=0
-        )
+        x_padded_rotated = rotate(x_padded, self.angle.to(x_padded), InterpolationMode.BILINEAR, fill=0)
 
         return x_padded_rotated
 
     def inverse_transform(self, y_padded_rotated, orig_x):
         height, width = orig_x.shape[2:]
-        pad_h, pad_w = int(height * self.pad_coef), int(width * self.pad_coef)
+        pad_h, pad_w = int(height*self.pad_coef), int(width*self.pad_coef)
 
         y_padded = rotate(
             y_padded_rotated,
@@ -57,7 +53,7 @@ class LearnableSpatialTransformWrapper(nn.Module):
             fill=0,
         )
         y_height, y_width = y_padded.shape[2:]
-        y = y_padded[:, :, pad_h : y_height - pad_h, pad_w : y_width - pad_w]
+        y = y_padded[:, :, pad_h:y_height - pad_h, pad_w:y_width - pad_w]
         return y
 
 
@@ -66,9 +62,9 @@ class SELayer(nn.Module):
         super(SELayer, self).__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
-            nn.Linear(channel, channel // reduction, bias=False),
+            nn.Linear(channel, channel//reduction, bias=False),
             nn.ReLU(inplace=True),
-            nn.Linear(channel // reduction, channel, bias=False),
+            nn.Linear(channel//reduction, channel, bias=False),
             nn.Sigmoid(),
         )
 
@@ -76,7 +72,7 @@ class SELayer(nn.Module):
         b, c, _, _ = x.size()
         y = self.avg_pool(x).view(b, c)
         y = self.fc(y).view(b, c, 1, 1)
-        res = x * y.expand_as(x)
+        res = x*y.expand_as(x)
         return res
 
 
@@ -99,15 +95,15 @@ class FourierUnit(nn.Module):
         self.groups = groups
 
         self.conv_layer = torch.nn.Conv2d(
-            in_channels=in_channels * 2 + (2 if spectral_pos_encoding else 0),
-            out_channels=out_channels * 2,
+            in_channels=in_channels*2 + (2 if spectral_pos_encoding else 0),
+            out_channels=out_channels*2,
             kernel_size=1,
             stride=1,
             padding=0,
             groups=self.groups,
             bias=False,
         )
-        self.bn = torch.nn.BatchNorm2d(out_channels * 2)
+        self.bn = torch.nn.BatchNorm2d(out_channels*2)
         self.relu = torch.nn.ReLU(inplace=True)
 
         # squeeze and excitation block
@@ -143,34 +139,24 @@ class FourierUnit(nn.Module):
         # (batch, c, h, w/2+1, 2)
         fft_dim = (-3, -2, -1) if self.ffc3d else (-2, -1)
         if half_check == True:
-            ffted = torch.fft.rfftn(
-                x.float(), dim=fft_dim, norm=self.fft_norm
-            )  # .type(torch.cuda.HalfTensor)
+            ffted = torch.fft.rfftn(x.float(), dim=fft_dim,
+                                    norm=self.fft_norm)  # .type(torch.cuda.HalfTensor)
         else:
             ffted = torch.fft.rfftn(x, dim=fft_dim, norm=self.fft_norm)
 
         ffted = torch.stack((ffted.real, ffted.imag), dim=-1)
         ffted = ffted.permute(0, 1, 4, 2, 3).contiguous()  # (batch, c, 2, h, w/2+1)
-        ffted = ffted.view(
-            (
-                batch,
-                -1,
-            )
-            + ffted.size()[3:]
-        )
+        ffted = ffted.view((
+            batch,
+            -1,
+        ) + ffted.size()[3:])
 
         if self.spectral_pos_encoding:
             height, width = ffted.shape[-2:]
-            coords_vert = (
-                torch.linspace(0, 1, height)[None, None, :, None]
-                .expand(batch, 1, height, width)
-                .to(ffted)
-            )
-            coords_hor = (
-                torch.linspace(0, 1, width)[None, None, None, :]
-                .expand(batch, 1, height, width)
-                .to(ffted)
-            )
+            coords_vert = (torch.linspace(0, 1, height)[None, None, :, None].expand(batch, 1, height,
+                                                                                    width).to(ffted))
+            coords_hor = (torch.linspace(0, 1, width)[None, None, None, :].expand(batch, 1, height,
+                                                                                  width).to(ffted))
             ffted = torch.cat((coords_vert, coords_hor, ffted), dim=1)
 
         if self.use_se:
@@ -179,33 +165,22 @@ class FourierUnit(nn.Module):
         if half_check == True:
             ffted = self.conv_layer(ffted.half())  # (batch, c*2, h, w/2+1)
         else:
-            ffted = self.conv_layer(
-                ffted
-            )  # .type(torch.cuda.FloatTensor)  # (batch, c*2, h, w/2+1)
+            ffted = self.conv_layer(ffted)  # .type(torch.cuda.FloatTensor)  # (batch, c*2, h, w/2+1)
 
         ffted = self.relu(self.bn(ffted))
         # forcing to be always float
         ffted = ffted.float()
 
-        ffted = (
-            ffted.view(
-                (
-                    batch,
-                    -1,
-                    2,
-                )
-                + ffted.size()[2:]
-            )
-            .permute(0, 1, 3, 4, 2)
-            .contiguous()
-        )  # (batch,c, t, h, w/2+1, 2)
+        ffted = (ffted.view((
+            batch,
+            -1,
+            2,
+        ) + ffted.size()[2:]).permute(0, 1, 3, 4, 2).contiguous())  # (batch,c, t, h, w/2+1, 2)
 
         ffted = torch.complex(ffted[..., 0], ffted[..., 1])
 
         ifft_shape_slice = x.shape[-3:] if self.ffc3d else x.shape[-2:]
-        output = torch.fft.irfftn(
-            ffted, s=ifft_shape_slice, dim=fft_dim, norm=self.fft_norm
-        )
+        output = torch.fft.irfftn(ffted, s=ifft_shape_slice, dim=fft_dim, norm=self.fft_norm)
 
         if half_check == True:
             output = output.half()
@@ -242,19 +217,15 @@ class SpectralTransform(nn.Module):
 
         self.stride = stride
         self.conv1 = nn.Sequential(
-            nn.Conv2d(
-                in_channels, out_channels // 2, kernel_size=1, groups=groups, bias=False
-            ),
-            nn.BatchNorm2d(out_channels // 2),
+            nn.Conv2d(in_channels, out_channels//2, kernel_size=1, groups=groups, bias=False),
+            nn.BatchNorm2d(out_channels//2),
             nn.ReLU(inplace=True),
         )
         fu_class = FourierUnit
-        self.fu = fu_class(out_channels // 2, out_channels // 2, groups, **fu_kwargs)
+        self.fu = fu_class(out_channels//2, out_channels//2, groups, **fu_kwargs)
         if self.enable_lfu:
-            self.lfu = fu_class(out_channels // 2, out_channels // 2, groups)
-        self.conv2 = torch.nn.Conv2d(
-            out_channels // 2, out_channels, kernel_size=1, groups=groups, bias=False
-        )
+            self.lfu = fu_class(out_channels//2, out_channels//2, groups)
+        self.conv2 = torch.nn.Conv2d(out_channels//2, out_channels, kernel_size=1, groups=groups, bias=False)
 
     def forward(self, x):
         x = self.downsample(x)
@@ -264,10 +235,8 @@ class SpectralTransform(nn.Module):
         if self.enable_lfu:
             _, c, h, _ = x.shape
             split_no = 2
-            split_s = h // split_no
-            xs = torch.cat(
-                torch.split(x[:, : c // 4], split_s, dim=-2), dim=1
-            ).contiguous()
+            split_s = h//split_no
+            xs = torch.cat(torch.split(x[:, :c//4], split_s, dim=-2), dim=1).contiguous()
             xs = torch.cat(torch.split(xs, split_s, dim=-1), dim=1).contiguous()
             xs = self.lfu(xs)
             xs = xs.repeat(1, 1, split_no, split_no).contiguous()
@@ -302,9 +271,9 @@ class FFC(nn.Module):
         assert stride == 1 or stride == 2, "Stride should be 1 or 2."
         self.stride = stride
 
-        in_cg = int(in_channels * ratio_gin)
+        in_cg = int(in_channels*ratio_gin)
         in_cl = in_channels - in_cg
-        out_cg = int(out_channels * ratio_gout)
+        out_cg = int(out_channels*ratio_gout)
         out_cl = out_channels - out_cg
         # groups_g = 1 if groups == 1 else int(groups * ratio_gout)
         # groups_l = 1 if groups == 1 else groups - groups_g
@@ -354,15 +323,13 @@ class FFC(nn.Module):
             in_cg,
             out_cg,
             stride,
-            1 if groups == 1 else groups // 2,
+            1 if groups == 1 else groups//2,
             enable_lfu,
             **spectral_kwargs,
         )
 
         self.gated = gated
-        module = (
-            nn.Identity if in_cg == 0 or out_cl == 0 or not self.gated else nn.Conv2d
-        )
+        module = (nn.Identity if in_cg == 0 or out_cl == 0 or not self.gated else nn.Conv2d)
         self.gate = module(in_channels, 2, 1)
 
     def forward(self, x):
@@ -381,9 +348,9 @@ class FFC(nn.Module):
             g2l_gate, l2g_gate = 1, 1
 
         if self.ratio_gout != 1:
-            out_xl = self.convl2l(x_l) + self.convg2l(x_g) * g2l_gate
+            out_xl = self.convl2l(x_l) + self.convg2l(x_g)*g2l_gate
         if self.ratio_gout != 0:
-            out_xg = self.convl2g(x_l) * l2g_gate + self.convg2g(x_g)
+            out_xg = self.convl2g(x_l)*l2g_gate + self.convg2g(x_g)
 
         return out_xl, out_xg
 
@@ -425,7 +392,7 @@ class FFC_BN_ACT(nn.Module):
         )
         lnorm = nn.Identity if ratio_gout == 1 else norm_layer
         gnorm = nn.Identity if ratio_gout == 0 else norm_layer
-        global_channels = int(out_channels * ratio_gout)
+        global_channels = int(out_channels*ratio_gout)
         self.bn_l = lnorm(out_channels - global_channels)
         self.bn_g = gnorm(global_channels)
 
@@ -477,19 +444,15 @@ class FFCResnetBlock(nn.Module):
             **conv_kwargs,
         )
         if spatial_transform_kwargs is not None:
-            self.conv1 = LearnableSpatialTransformWrapper(
-                self.conv1, **spatial_transform_kwargs
-            )
-            self.conv2 = LearnableSpatialTransformWrapper(
-                self.conv2, **spatial_transform_kwargs
-            )
+            self.conv1 = LearnableSpatialTransformWrapper(self.conv1, **spatial_transform_kwargs)
+            self.conv2 = LearnableSpatialTransformWrapper(self.conv2, **spatial_transform_kwargs)
         self.inline = inline
 
     def forward(self, x):
         if self.inline:
             x_l, x_g = (
-                x[:, : -self.conv1.ffc.global_in_num],
-                x[:, -self.conv1.ffc.global_in_num :],
+                x[:, :-self.conv1.ffc.global_in_num],
+                x[:, -self.conv1.ffc.global_in_num:],
             )
         else:
             x_l, x_g = x if type(x) is tuple else (x, 0)
@@ -593,8 +556,8 @@ class FFCResNetGenerator(nn.Module):
                 cur_conv_kwargs = downsample_conv_kwargs
             model += [
                 FFC_BN_ACT(
-                    min(max_features, ngf * mult),
-                    min(max_features, ngf * mult * 2),
+                    min(max_features, ngf*mult),
+                    min(max_features, ngf*mult*2),
                     kernel_size=3,
                     stride=2,
                     padding=1,
@@ -605,7 +568,7 @@ class FFCResNetGenerator(nn.Module):
             ]
 
         mult = 2**n_downsampling
-        feats_num_bottleneck = min(max_features, ngf * mult)
+        feats_num_bottleneck = min(max_features, ngf*mult)
 
         ### resnet blocks
         for i in range(n_blocks):
@@ -617,26 +580,24 @@ class FFCResNetGenerator(nn.Module):
                 **resnet_conv_kwargs,
             )
             if spatial_transform_layers is not None and i in spatial_transform_layers:
-                cur_resblock = LearnableSpatialTransformWrapper(
-                    cur_resblock, **spatial_transform_kwargs
-                )
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
             model += [cur_resblock]
 
         model += [ConcatTupleLayer()]
 
         ### upsample
         for i in range(n_downsampling):
-            mult = 2 ** (n_downsampling - i)
+            mult = 2**(n_downsampling - i)
             model += [
                 nn.ConvTranspose2d(
-                    min(max_features, ngf * mult),
-                    min(max_features, int(ngf * mult / 2)),
+                    min(max_features, ngf*mult),
+                    min(max_features, int(ngf*mult/2)),
                     kernel_size=3,
                     stride=2,
                     padding=1,
                     output_padding=1,
                 ),
-                up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                up_norm_layer(min(max_features, int(ngf*mult/2))),
                 up_activation,
             ]
 
@@ -677,10 +638,7 @@ class LaMa(nn.Module):
         self.pad_to_square = False
 
         self.model = FFCResNetGenerator(self.in_nc, self.out_nc)
-        self.state = {
-            k.replace("generator.model", "model.model"): v
-            for k, v in state_dict.items()
-        }
+        self.state = {k.replace("generator.model", "model.model"): v for k, v in state_dict.items()}
 
         self.supports_fp16 = False
         self.support_bf16 = True
@@ -688,7 +646,7 @@ class LaMa(nn.Module):
         self.load_state_dict(self.state, strict=False)
 
     def forward(self, img, mask):
-        masked_img = img * (1 - mask)
-        inpainted_mask = mask * self.model.forward(masked_img, mask)
-        result = inpainted_mask + (1 - mask) * img
+        masked_img = img*(1 - mask)
+        inpainted_mask = mask*self.model.forward(masked_img, mask)
+        result = inpainted_mask + (1 - mask)*img
         return result

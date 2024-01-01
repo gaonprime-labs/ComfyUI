@@ -5,6 +5,7 @@ import torch
 import torch.nn.functional as F
 import comfy.model_management
 
+
 def get_canny_nms_kernel(device=None, dtype=None):
     """Utility function that returns 3x3 kernels for the Canny Non-maximal suppression."""
     return torch.tensor(
@@ -40,30 +41,34 @@ def get_hysteresis_kernel(device=None, dtype=None):
         dtype=dtype,
     )
 
+
 def gaussian_blur_2d(img, kernel_size, sigma):
-    ksize_half = (kernel_size - 1) * 0.5
+    ksize_half = (kernel_size - 1)*0.5
 
     x = torch.linspace(-ksize_half, ksize_half, steps=kernel_size)
 
-    pdf = torch.exp(-0.5 * (x / sigma).pow(2))
+    pdf = torch.exp(-0.5*(x/sigma).pow(2))
 
-    x_kernel = pdf / pdf.sum()
+    x_kernel = pdf/pdf.sum()
     x_kernel = x_kernel.to(device=img.device, dtype=img.dtype)
 
     kernel2d = torch.mm(x_kernel[:, None], x_kernel[None, :])
     kernel2d = kernel2d.expand(img.shape[-3], 1, kernel2d.shape[0], kernel2d.shape[1])
 
-    padding = [kernel_size // 2, kernel_size // 2, kernel_size // 2, kernel_size // 2]
+    padding = [kernel_size//2, kernel_size//2, kernel_size//2, kernel_size//2]
 
     img = torch.nn.functional.pad(img, padding, mode="reflect")
     img = torch.nn.functional.conv2d(img, kernel2d, groups=img.shape[-3])
 
     return img
 
+
 def get_sobel_kernel2d(device=None, dtype=None):
-    kernel_x = torch.tensor([[-1.0, 0.0, 1.0], [-2.0, 0.0, 2.0], [-1.0, 0.0, 1.0]], device=device, dtype=dtype)
+    kernel_x = torch.tensor([[-1.0, 0.0, 1.0], [-2.0, 0.0, 2.0], [-1.0, 0.0, 1.0]], device=device,
+                            dtype=dtype)
     kernel_y = kernel_x.transpose(0, 1)
     return torch.stack([kernel_x, kernel_y])
+
 
 def spatial_gradient(input, normalized: bool = True):
     r"""Compute the first order image derivative in both x and y using a Sobel operator.
@@ -97,13 +102,14 @@ def spatial_gradient(input, normalized: bool = True):
     tmp_kernel = kernel[:, None, ...]
 
     # Pad with "replicate for spatial dims, but with zeros for channel
-    spatial_pad = [kernel.size(1) // 2, kernel.size(1) // 2, kernel.size(2) // 2, kernel.size(2) // 2]
+    spatial_pad = [kernel.size(1)//2, kernel.size(1)//2, kernel.size(2)//2, kernel.size(2)//2]
     out_channels: int = 2
-    padded_inp = torch.nn.functional.pad(input.reshape(b * c, 1, h, w), spatial_pad, 'replicate')
+    padded_inp = torch.nn.functional.pad(input.reshape(b*c, 1, h, w), spatial_pad, 'replicate')
     out = F.conv2d(padded_inp, tmp_kernel, groups=1, padding=0, stride=1)
     return out.reshape(b, c, out_channels, h, w)
 
-def rgb_to_grayscale(image, rgb_weights = None):
+
+def rgb_to_grayscale(image, rgb_weights=None):
     r"""Convert a RGB image to grayscale version of image.
 
     .. image:: _static/img/rgb_to_grayscale.png
@@ -148,16 +154,17 @@ def rgb_to_grayscale(image, rgb_weights = None):
     b: Tensor = image[..., 2:3, :, :]
 
     w_r, w_g, w_b = rgb_weights.unbind()
-    return w_r * r + w_g * g + w_b * b
+    return w_r*r + w_g*g + w_b*b
+
 
 def canny(
     input,
-    low_threshold = 0.1,
-    high_threshold = 0.2,
-    kernel_size  = 5,
-    sigma = 1,
-    hysteresis = True,
-    eps = 1e-6,
+    low_threshold=0.1,
+    high_threshold=0.2,
+    kernel_size=5,
+    sigma=1,
+    hysteresis=True,
+    eps=1e-6,
 ):
     r"""Find edges of the input image and filters them using the Canny algorithm.
     .. image:: _static/img/canny.png
@@ -212,24 +219,24 @@ def canny(
     gy: Tensor = gradients[:, :, 1]
 
     # Compute gradient magnitude and angle
-    magnitude: Tensor = torch.sqrt(gx * gx + gy * gy + eps)
+    magnitude: Tensor = torch.sqrt(gx*gx + gy*gy + eps)
     angle: Tensor = torch.atan2(gy, gx)
 
     # Radians to Degrees
-    angle = 180.0 * angle / math.pi
+    angle = 180.0*angle/math.pi
 
     # Round angle to the nearest 45 degree
-    angle = torch.round(angle / 45) * 45
+    angle = torch.round(angle/45)*45
 
     # Non-maximal suppression
     nms_kernels: Tensor = get_canny_nms_kernel(device, dtype)
-    nms_magnitude: Tensor = F.conv2d(magnitude, nms_kernels, padding=nms_kernels.shape[-1] // 2)
+    nms_magnitude: Tensor = F.conv2d(magnitude, nms_kernels, padding=nms_kernels.shape[-1]//2)
 
     # Get the indices for both directions
-    positive_idx: Tensor = (angle / 45) % 8
+    positive_idx: Tensor = (angle/45) % 8
     positive_idx = positive_idx.long()
 
-    negative_idx: Tensor = ((angle / 45) + 4) % 8
+    negative_idx: Tensor = ((angle/45) + 4) % 8
     negative_idx = negative_idx.long()
 
     # Apply the non-maximum suppression to the different directions
@@ -237,12 +244,11 @@ def canny(
     channel_select_filtered_negative: Tensor = torch.gather(nms_magnitude, 1, negative_idx)
 
     channel_select_filtered: Tensor = torch.stack(
-        [channel_select_filtered_positive, channel_select_filtered_negative], 1
-    )
+        [channel_select_filtered_positive, channel_select_filtered_negative], 1)
 
     is_max: Tensor = channel_select_filtered.min(dim=1)[0] > 0.0
 
-    magnitude = magnitude * is_max
+    magnitude = magnitude*is_max
 
     # Threshold
     edges: Tensor = F.threshold(magnitude, low_threshold, 0.0)
@@ -250,7 +256,7 @@ def canny(
     low: Tensor = magnitude > low_threshold
     high: Tensor = magnitude > high_threshold
 
-    edges = low * 0.5 + high * 0.5
+    edges = low*0.5 + high*0.5
     edges = edges.to(dtype)
 
     # Hysteresis
@@ -262,14 +268,13 @@ def canny(
             weak: Tensor = (edges == 0.5).float()
             strong: Tensor = (edges == 1).float()
 
-            hysteresis_magnitude: Tensor = F.conv2d(
-                edges, hysteresis_kernels, padding=hysteresis_kernels.shape[-1] // 2
-            )
+            hysteresis_magnitude: Tensor = F.conv2d(edges, hysteresis_kernels,
+                                                    padding=hysteresis_kernels.shape[-1]//2)
             hysteresis_magnitude = (hysteresis_magnitude == 1).any(1, keepdim=True).to(dtype)
-            hysteresis_magnitude = hysteresis_magnitude * weak + strong
+            hysteresis_magnitude = hysteresis_magnitude*weak + strong
 
             edges_old = edges.clone()
-            edges = hysteresis_magnitude + (hysteresis_magnitude == 0) * weak * 0.5
+            edges = hysteresis_magnitude + (hysteresis_magnitude == 0)*weak*0.5
 
         edges = hysteresis_magnitude
 
@@ -279,20 +284,35 @@ def canny(
 class Canny:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {"image": ("IMAGE",),
-                                "low_threshold": ("FLOAT", {"default": 0.4, "min": 0.01, "max": 0.99, "step": 0.01}),
-                                "high_threshold": ("FLOAT", {"default": 0.8, "min": 0.01, "max": 0.99, "step": 0.01})
-                                }}
+        return {
+            "required": {
+                "image": ("IMAGE", ),
+                "low_threshold": ("FLOAT", {
+                    "default": 0.4,
+                    "min": 0.01,
+                    "max": 0.99,
+                    "step": 0.01
+                }),
+                "high_threshold": ("FLOAT", {
+                    "default": 0.8,
+                    "min": 0.01,
+                    "max": 0.99,
+                    "step": 0.01
+                })
+            }
+        }
 
-    RETURN_TYPES = ("IMAGE",)
+    RETURN_TYPES = ("IMAGE", )
     FUNCTION = "detect_edge"
 
     CATEGORY = "image/preprocessors"
 
     def detect_edge(self, image, low_threshold, high_threshold):
-        output = canny(image.to(comfy.model_management.get_torch_device()).movedim(-1, 1), low_threshold, high_threshold)
+        output = canny(
+            image.to(comfy.model_management.get_torch_device()).movedim(-1, 1), low_threshold, high_threshold)
         img_out = output[1].to(comfy.model_management.intermediate_device()).repeat(1, 3, 1, 1).movedim(1, -1)
-        return (img_out,)
+        return (img_out, )
+
 
 NODE_CLASS_MAPPINGS = {
     "Canny": Canny,

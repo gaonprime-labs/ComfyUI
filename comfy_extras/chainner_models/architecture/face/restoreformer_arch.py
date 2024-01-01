@@ -19,7 +19,6 @@ class VectorQuantizer(nn.Module):
     - beta : commitment cost used in loss term, beta * ||z_e(x)-sg[e]||^2
     _____________________________________________
     """
-
     def __init__(self, n_e, e_dim, beta):
         super(VectorQuantizer, self).__init__()
         self.n_e = n_e
@@ -27,7 +26,7 @@ class VectorQuantizer(nn.Module):
         self.beta = beta
 
         self.embedding = nn.Embedding(self.n_e, self.e_dim)
-        self.embedding.weight.data.uniform_(-1.0 / self.n_e, 1.0 / self.n_e)
+        self.embedding.weight.data.uniform_(-1.0/self.n_e, 1.0/self.n_e)
 
     def forward(self, z):
         """
@@ -44,11 +43,8 @@ class VectorQuantizer(nn.Module):
         z_flattened = z.view(-1, self.e_dim)
         # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
 
-        d = (
-            torch.sum(z_flattened**2, dim=1, keepdim=True)
-            + torch.sum(self.embedding.weight**2, dim=1)
-            - 2 * torch.matmul(z_flattened, self.embedding.weight.t())
-        )
+        d = (torch.sum(z_flattened**2, dim=1, keepdim=True) + torch.sum(self.embedding.weight**2, dim=1) -
+             2*torch.matmul(z_flattened, self.embedding.weight.t()))
 
         # could possible replace this here
         # #\start...
@@ -76,9 +72,7 @@ class VectorQuantizer(nn.Module):
         # ......\end......... (TODO)
 
         # compute loss for embedding
-        loss = torch.mean((z_q.detach() - z) ** 2) + self.beta * torch.mean(
-            (z_q - z.detach()) ** 2
-        )
+        loss = torch.mean((z_q.detach() - z)**2) + self.beta*torch.mean((z_q - z.detach())**2)
 
         # preserve gradients
         z_q = z + (z_q - z).detach()
@@ -86,7 +80,7 @@ class VectorQuantizer(nn.Module):
         # perplexity
 
         e_mean = torch.mean(min_encodings, dim=0)
-        perplexity = torch.exp(-torch.sum(e_mean * torch.log(e_mean + 1e-10)))
+        perplexity = torch.exp(-torch.sum(e_mean*torch.log(e_mean + 1e-10)))
 
         # reshape back to match original input shape
         z_q = z_q.permute(0, 3, 1, 2).contiguous()
@@ -114,13 +108,11 @@ class VectorQuantizer(nn.Module):
 # pytorch_diffusion + derived encoder decoder
 def nonlinearity(x):
     # swish
-    return x * torch.sigmoid(x)
+    return x*torch.sigmoid(x)
 
 
 def Normalize(in_channels):
-    return torch.nn.GroupNorm(
-        num_groups=32, num_channels=in_channels, eps=1e-6, affine=True
-    )
+    return torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
 
 
 class Upsample(nn.Module):
@@ -128,9 +120,7 @@ class Upsample(nn.Module):
         super().__init__()
         self.with_conv = with_conv
         if self.with_conv:
-            self.conv = torch.nn.Conv2d(
-                in_channels, in_channels, kernel_size=3, stride=1, padding=1
-            )
+            self.conv = torch.nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, x):
         x = torch.nn.functional.interpolate(x, scale_factor=2.0, mode="nearest")
@@ -145,9 +135,7 @@ class Downsample(nn.Module):
         self.with_conv = with_conv
         if self.with_conv:
             # no asymmetric padding in torch conv, must do it ourselves
-            self.conv = torch.nn.Conv2d(
-                in_channels, in_channels, kernel_size=3, stride=2, padding=0
-            )
+            self.conv = torch.nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=0)
 
     def forward(self, x):
         if self.with_conv:
@@ -160,15 +148,7 @@ class Downsample(nn.Module):
 
 
 class ResnetBlock(nn.Module):
-    def __init__(
-        self,
-        *,
-        in_channels,
-        out_channels=None,
-        conv_shortcut=False,
-        dropout,
-        temb_channels=512
-    ):
+    def __init__(self, *, in_channels, out_channels=None, conv_shortcut=False, dropout, temb_channels=512):
         super().__init__()
         self.in_channels = in_channels
         out_channels = in_channels if out_channels is None else out_channels
@@ -176,25 +156,19 @@ class ResnetBlock(nn.Module):
         self.use_conv_shortcut = conv_shortcut
 
         self.norm1 = Normalize(in_channels)
-        self.conv1 = torch.nn.Conv2d(
-            in_channels, out_channels, kernel_size=3, stride=1, padding=1
-        )
+        self.conv1 = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
         if temb_channels > 0:
             self.temb_proj = torch.nn.Linear(temb_channels, out_channels)
         self.norm2 = Normalize(out_channels)
         self.dropout = torch.nn.Dropout(dropout)
-        self.conv2 = torch.nn.Conv2d(
-            out_channels, out_channels, kernel_size=3, stride=1, padding=1
-        )
+        self.conv2 = torch.nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
         if self.in_channels != self.out_channels:
             if self.use_conv_shortcut:
-                self.conv_shortcut = torch.nn.Conv2d(
-                    in_channels, out_channels, kernel_size=3, stride=1, padding=1
-                )
+                self.conv_shortcut = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1,
+                                                     padding=1)
             else:
-                self.nin_shortcut = torch.nn.Conv2d(
-                    in_channels, out_channels, kernel_size=1, stride=1, padding=0
-                )
+                self.nin_shortcut = torch.nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1,
+                                                    padding=0)
 
     def forward(self, x, temb):
         h = x
@@ -224,26 +198,16 @@ class MultiHeadAttnBlock(nn.Module):
         super().__init__()
         self.in_channels = in_channels
         self.head_size = head_size
-        self.att_size = in_channels // head_size
-        assert (
-            in_channels % head_size == 0
-        ), "The size of head should be divided by the number of channels."
+        self.att_size = in_channels//head_size
+        assert (in_channels % head_size == 0), "The size of head should be divided by the number of channels."
 
         self.norm1 = Normalize(in_channels)
         self.norm2 = Normalize(in_channels)
 
-        self.q = torch.nn.Conv2d(
-            in_channels, in_channels, kernel_size=1, stride=1, padding=0
-        )
-        self.k = torch.nn.Conv2d(
-            in_channels, in_channels, kernel_size=1, stride=1, padding=0
-        )
-        self.v = torch.nn.Conv2d(
-            in_channels, in_channels, kernel_size=1, stride=1, padding=0
-        )
-        self.proj_out = torch.nn.Conv2d(
-            in_channels, in_channels, kernel_size=1, stride=1, padding=0
-        )
+        self.q = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.k = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.v = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.proj_out = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
         self.num = 0
 
     def forward(self, x, y=None):
@@ -260,20 +224,20 @@ class MultiHeadAttnBlock(nn.Module):
 
         # compute attention
         b, c, h, w = q.shape
-        q = q.reshape(b, self.head_size, self.att_size, h * w)
+        q = q.reshape(b, self.head_size, self.att_size, h*w)
         q = q.permute(0, 3, 1, 2)  # b, hw, head, att
 
-        k = k.reshape(b, self.head_size, self.att_size, h * w)
+        k = k.reshape(b, self.head_size, self.att_size, h*w)
         k = k.permute(0, 3, 1, 2)
 
-        v = v.reshape(b, self.head_size, self.att_size, h * w)
+        v = v.reshape(b, self.head_size, self.att_size, h*w)
         v = v.permute(0, 3, 1, 2)
 
         q = q.transpose(1, 2)
         v = v.transpose(1, 2)
         k = k.transpose(1, 2).transpose(2, 3)
 
-        scale = int(self.att_size) ** (-0.5)
+        scale = int(self.att_size)**(-0.5)
         q.mul_(scale)
         w_ = torch.matmul(q, k)
         w_ = F.softmax(w_, dim=3)
@@ -290,23 +254,9 @@ class MultiHeadAttnBlock(nn.Module):
 
 
 class MultiHeadEncoder(nn.Module):
-    def __init__(
-        self,
-        ch,
-        out_ch,
-        ch_mult=(1, 2, 4, 8),
-        num_res_blocks=2,
-        attn_resolutions=(16,),
-        dropout=0.0,
-        resamp_with_conv=True,
-        in_channels=3,
-        resolution=512,
-        z_channels=256,
-        double_z=True,
-        enable_mid=True,
-        head_size=1,
-        **ignore_kwargs
-    ):
+    def __init__(self, ch, out_ch, ch_mult=(1, 2, 4, 8), num_res_blocks=2, attn_resolutions=(16, ),
+                 dropout=0.0, resamp_with_conv=True, in_channels=3, resolution=512, z_channels=256,
+                 double_z=True, enable_mid=True, head_size=1, **ignore_kwargs):
         super().__init__()
         self.ch = ch
         self.temb_ch = 0
@@ -317,18 +267,16 @@ class MultiHeadEncoder(nn.Module):
         self.enable_mid = enable_mid
 
         # downsampling
-        self.conv_in = torch.nn.Conv2d(
-            in_channels, self.ch, kernel_size=3, stride=1, padding=1
-        )
+        self.conv_in = torch.nn.Conv2d(in_channels, self.ch, kernel_size=3, stride=1, padding=1)
 
         curr_res = resolution
-        in_ch_mult = (1,) + tuple(ch_mult)
+        in_ch_mult = (1, ) + tuple(ch_mult)
         self.down = nn.ModuleList()
         for i_level in range(self.num_resolutions):
             block = nn.ModuleList()
             attn = nn.ModuleList()
-            block_in = ch * in_ch_mult[i_level]
-            block_out = ch * ch_mult[i_level]
+            block_in = ch*in_ch_mult[i_level]
+            block_out = ch*ch_mult[i_level]
             for i_block in range(self.num_res_blocks):
                 block.append(
                     ResnetBlock(
@@ -336,8 +284,7 @@ class MultiHeadEncoder(nn.Module):
                         out_channels=block_out,
                         temb_channels=self.temb_ch,
                         dropout=dropout,
-                    )
-                )
+                    ))
                 block_in = block_out
                 if curr_res in attn_resolutions:
                     attn.append(MultiHeadAttnBlock(block_in, head_size))
@@ -346,7 +293,7 @@ class MultiHeadEncoder(nn.Module):
             down.attn = attn
             if i_level != self.num_resolutions - 1:
                 down.downsample = Downsample(block_in, resamp_with_conv)
-                curr_res = curr_res // 2
+                curr_res = curr_res//2
             self.down.append(down)
 
         # middle
@@ -370,7 +317,7 @@ class MultiHeadEncoder(nn.Module):
         self.norm_out = Normalize(block_in)
         self.conv_out = torch.nn.Conv2d(
             block_in,
-            2 * z_channels if double_z else z_channels,
+            2*z_channels if double_z else z_channels,
             kernel_size=3,
             stride=1,
             padding=1,
@@ -415,23 +362,9 @@ class MultiHeadEncoder(nn.Module):
 
 
 class MultiHeadDecoder(nn.Module):
-    def __init__(
-        self,
-        ch,
-        out_ch,
-        ch_mult=(1, 2, 4, 8),
-        num_res_blocks=2,
-        attn_resolutions=(16,),
-        dropout=0.0,
-        resamp_with_conv=True,
-        in_channels=3,
-        resolution=512,
-        z_channels=256,
-        give_pre_end=False,
-        enable_mid=True,
-        head_size=1,
-        **ignorekwargs
-    ):
+    def __init__(self, ch, out_ch, ch_mult=(1, 2, 4, 8), num_res_blocks=2, attn_resolutions=(16, ),
+                 dropout=0.0, resamp_with_conv=True, in_channels=3, resolution=512, z_channels=256,
+                 give_pre_end=False, enable_mid=True, head_size=1, **ignorekwargs):
         super().__init__()
         self.ch = ch
         self.temb_ch = 0
@@ -443,19 +376,13 @@ class MultiHeadDecoder(nn.Module):
         self.enable_mid = enable_mid
 
         # compute in_ch_mult, block_in and curr_res at lowest res
-        block_in = ch * ch_mult[self.num_resolutions - 1]
-        curr_res = resolution // 2 ** (self.num_resolutions - 1)
+        block_in = ch*ch_mult[self.num_resolutions - 1]
+        curr_res = resolution//2**(self.num_resolutions - 1)
         self.z_shape = (1, z_channels, curr_res, curr_res)
-        print(
-            "Working with z of shape {} = {} dimensions.".format(
-                self.z_shape, np.prod(self.z_shape)
-            )
-        )
+        print("Working with z of shape {} = {} dimensions.".format(self.z_shape, np.prod(self.z_shape)))
 
         # z to block_in
-        self.conv_in = torch.nn.Conv2d(
-            z_channels, block_in, kernel_size=3, stride=1, padding=1
-        )
+        self.conv_in = torch.nn.Conv2d(z_channels, block_in, kernel_size=3, stride=1, padding=1)
 
         # middle
         if self.enable_mid:
@@ -479,7 +406,7 @@ class MultiHeadDecoder(nn.Module):
         for i_level in reversed(range(self.num_resolutions)):
             block = nn.ModuleList()
             attn = nn.ModuleList()
-            block_out = ch * ch_mult[i_level]
+            block_out = ch*ch_mult[i_level]
             for i_block in range(self.num_res_blocks + 1):
                 block.append(
                     ResnetBlock(
@@ -487,8 +414,7 @@ class MultiHeadDecoder(nn.Module):
                         out_channels=block_out,
                         temb_channels=self.temb_ch,
                         dropout=dropout,
-                    )
-                )
+                    ))
                 block_in = block_out
                 if curr_res in attn_resolutions:
                     attn.append(MultiHeadAttnBlock(block_in, head_size))
@@ -497,14 +423,12 @@ class MultiHeadDecoder(nn.Module):
             up.attn = attn
             if i_level != 0:
                 up.upsample = Upsample(block_in, resamp_with_conv)
-                curr_res = curr_res * 2
+                curr_res = curr_res*2
             self.up.insert(0, up)  # prepend to get consistent order
 
         # end
         self.norm_out = Normalize(block_in)
-        self.conv_out = torch.nn.Conv2d(
-            block_in, out_ch, kernel_size=3, stride=1, padding=1
-        )
+        self.conv_out = torch.nn.Conv2d(block_in, out_ch, kernel_size=3, stride=1, padding=1)
 
     def forward(self, z):
         # assert z.shape[1:] == self.z_shape[1:]
@@ -542,23 +466,9 @@ class MultiHeadDecoder(nn.Module):
 
 
 class MultiHeadDecoderTransformer(nn.Module):
-    def __init__(
-        self,
-        ch,
-        out_ch,
-        ch_mult=(1, 2, 4, 8),
-        num_res_blocks=2,
-        attn_resolutions=(16,),
-        dropout=0.0,
-        resamp_with_conv=True,
-        in_channels=3,
-        resolution=512,
-        z_channels=256,
-        give_pre_end=False,
-        enable_mid=True,
-        head_size=1,
-        **ignorekwargs
-    ):
+    def __init__(self, ch, out_ch, ch_mult=(1, 2, 4, 8), num_res_blocks=2, attn_resolutions=(16, ),
+                 dropout=0.0, resamp_with_conv=True, in_channels=3, resolution=512, z_channels=256,
+                 give_pre_end=False, enable_mid=True, head_size=1, **ignorekwargs):
         super().__init__()
         self.ch = ch
         self.temb_ch = 0
@@ -570,19 +480,13 @@ class MultiHeadDecoderTransformer(nn.Module):
         self.enable_mid = enable_mid
 
         # compute in_ch_mult, block_in and curr_res at lowest res
-        block_in = ch * ch_mult[self.num_resolutions - 1]
-        curr_res = resolution // 2 ** (self.num_resolutions - 1)
+        block_in = ch*ch_mult[self.num_resolutions - 1]
+        curr_res = resolution//2**(self.num_resolutions - 1)
         self.z_shape = (1, z_channels, curr_res, curr_res)
-        print(
-            "Working with z of shape {} = {} dimensions.".format(
-                self.z_shape, np.prod(self.z_shape)
-            )
-        )
+        print("Working with z of shape {} = {} dimensions.".format(self.z_shape, np.prod(self.z_shape)))
 
         # z to block_in
-        self.conv_in = torch.nn.Conv2d(
-            z_channels, block_in, kernel_size=3, stride=1, padding=1
-        )
+        self.conv_in = torch.nn.Conv2d(z_channels, block_in, kernel_size=3, stride=1, padding=1)
 
         # middle
         if self.enable_mid:
@@ -606,7 +510,7 @@ class MultiHeadDecoderTransformer(nn.Module):
         for i_level in reversed(range(self.num_resolutions)):
             block = nn.ModuleList()
             attn = nn.ModuleList()
-            block_out = ch * ch_mult[i_level]
+            block_out = ch*ch_mult[i_level]
             for i_block in range(self.num_res_blocks + 1):
                 block.append(
                     ResnetBlock(
@@ -614,8 +518,7 @@ class MultiHeadDecoderTransformer(nn.Module):
                         out_channels=block_out,
                         temb_channels=self.temb_ch,
                         dropout=dropout,
-                    )
-                )
+                    ))
                 block_in = block_out
                 if curr_res in attn_resolutions:
                     attn.append(MultiHeadAttnBlock(block_in, head_size))
@@ -624,14 +527,12 @@ class MultiHeadDecoderTransformer(nn.Module):
             up.attn = attn
             if i_level != 0:
                 up.upsample = Upsample(block_in, resamp_with_conv)
-                curr_res = curr_res * 2
+                curr_res = curr_res*2
             self.up.insert(0, up)  # prepend to get consistent order
 
         # end
         self.norm_out = Normalize(block_in)
-        self.conv_out = torch.nn.Conv2d(
-            block_in, out_ch, kernel_size=3, stride=1, padding=1
-        )
+        self.conv_out = torch.nn.Conv2d(block_in, out_ch, kernel_size=3, stride=1, padding=1)
 
     def forward(self, z, hs):
         # assert z.shape[1:] == self.z_shape[1:]
@@ -654,9 +555,7 @@ class MultiHeadDecoderTransformer(nn.Module):
             for i_block in range(self.num_res_blocks + 1):
                 h = self.up[i_level].block[i_block](h, temb)
                 if len(self.up[i_level].attn) > 0:
-                    h = self.up[i_level].attn[i_block](
-                        h, hs["block_" + str(i_level) + "_atten"]
-                    )
+                    h = self.up[i_level].attn[i_block](h, hs["block_" + str(i_level) + "_atten"])
                     # hfeature = h.clone()
             if i_level != 0:
                 h = self.up[i_level].upsample(h)
@@ -684,7 +583,7 @@ class RestoreFormer(nn.Module):
         out_ch = 3
         ch_mult = (1, 2, 2, 4, 4, 8)
         num_res_blocks = 2
-        attn_resolutions = (16,)
+        attn_resolutions = (16, )
         dropout = 0.0
         in_channels = 3
         resolution = 512

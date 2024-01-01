@@ -2,8 +2,10 @@ import pickle
 
 load = pickle.load
 
+
 class Empty:
     pass
+
 
 class Unpickler(pickle.Unpickler):
     def find_class(self, module, name):
