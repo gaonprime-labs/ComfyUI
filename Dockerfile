@@ -18,13 +18,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 
 # Consolidate pip installs
-COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt \
-  && pip3 install --no-cache-dir \
+RUN pip3 install --no-cache-dir \
   torch \
   torchvision \
   torchaudio \
   onnxruntime \
+  --extra-index-url https://download.pytorch.org/whl/cu121
+
+COPY requirements.txt .
+
+RUN pip3 install --no-cache-dir \
   opencv-python \
   opencv-python-headless \
   opencv-contrib-python \
@@ -32,9 +35,9 @@ RUN pip3 install --no-cache-dir -r requirements.txt \
   matplotlib \
   basicsr \
   openai \
-  numba \
-  --extra-index-url https://download.pytorch.org/whl/cu121
+  numba
 
+RUN pip3 install --no-cache-dir -r requirements.txt
 # Copy source code
 COPY . /app
 
