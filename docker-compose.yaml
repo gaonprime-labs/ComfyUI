@@ -5,7 +5,7 @@ services:
     platform: linux/x86_64 #1 miniconda 설치 에러, 도커 아키텍처를 명시하여 fix
     ports:
       - "8188:8188"
-    user: "1000:1000"
+    # user: "1000:1000"
     build:
       context: .
       dockerfile: Dockerfile
