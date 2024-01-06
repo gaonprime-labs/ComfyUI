@@ -79,6 +79,15 @@ class CustomSaveImageS3:
                 "keyin": ("STRING", {
                     "default": "path"
                 }),
+                "aws_access_key": ("STRING", {
+                    "default": "aws_access_key"
+                }),
+                "aws_secret_key": ("STRING", {
+                    "default": "aws_secret_key"
+                }),
+                "bucket_name": ("STRING", {
+                    "default": "bucket_name"
+                })
             },
         }
 
@@ -114,7 +123,7 @@ class CustomSaveImageS3:
                                     aws_secret_access_key=aws_secret_key)
                 f = io.BytesIO()
                 f.name = path
-                Image.fromarray(img).save(f, format="png")
+                img.save(f, format="png", pnginfo=metadata, compress_level=compress_level)
                 f.seek(0)
                 res = s3.Object(bucket_name, path).put(Body=f)  #@TODO ACL이 필요하면 만들어주기
                 ui_images.append({
@@ -123,7 +132,8 @@ class CustomSaveImageS3:
                     "type": "output"
                 })  #@?
                 result_images.append({"path": path})
-            out = {"ui": {"images": ui_images}, "result": {"images": result_images}}
+            # out = {"ui": {"images": ui_images}, "result": {"images": result_images}}
+            out = {"ui": {"images": ui_images}}
             inspect("run.out", out)
             return out
 

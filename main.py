@@ -175,7 +175,7 @@ def mq_worker(server):
             # prompt worker postprocessing
             # post prompt postprocessing
 
-    mq_subscriber = mq.RabbitMqConsumer(MQ_URL, MQ_CONSUME_QUEUE, callback)
+    mq_subscriber = mq.RabbitMq(MQ_URL, MQ_CONSUME_QUEUE, callback)
     mq_subscriber.subscribe()
 
 
