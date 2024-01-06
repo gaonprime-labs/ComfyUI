@@ -22,13 +22,13 @@ class CustomLoadImageS3:
                     "default": "path"
                 }),
                 "aws_access_key": ("STRING", {
-                    "default": "aws_access_key"
+                    "default": "$aws_access_key"
                 }),
                 "aws_secret_key": ("STRING", {
-                    "default": "aws_secret_key"
+                    "default": "$aws_secret_key"
                 }),
                 "bucket_name": ("STRING", {
-                    "default": "bucket_name"
+                    "default": "$bucket_name"
                 })
             },
         }
@@ -80,13 +80,13 @@ class CustomSaveImageS3:
                     "default": "path"
                 }),
                 "aws_access_key": ("STRING", {
-                    "default": "aws_access_key"
+                    "default": "$aws_access_key"
                 }),
                 "aws_secret_key": ("STRING", {
-                    "default": "aws_secret_key"
+                    "default": "$aws_secret_key"
                 }),
                 "bucket_name": ("STRING", {
-                    "default": "bucket_name"
+                    "default": "$bucket_name"
                 })
             },
         }

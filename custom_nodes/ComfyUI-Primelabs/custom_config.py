@@ -91,7 +91,7 @@ class CustomStringListBySplit:
                     "default": ","
                 }),
                 "keyout": ("STRING", {
-                    "default": "string"
+                    "default": "path"
                 }),
             }
         }
