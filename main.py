@@ -6,6 +6,11 @@ import os
 import importlib.util
 import folder_paths
 import time
+import mq
+from myenv import MQ_URL, MQ_CONSUME_QUEUE
+from myerror import CustomError
+from util.logger import lg
+import uuid
 
 
 def execute_prestartup_script():
@@ -133,6 +138,47 @@ def prompt_worker(q, server):
                 need_gc = False
 
 
+def mq_worker(server):
+    def callback(json_data: dict):
+        e = execution.PromptExecutor(server)
+        with lg.context("mq_worker.callback"):
+            # (1) server: post prompt
+            if "prompt" in json_data:
+                prompt = json_data["prompt"]
+                valid = execution.validate_prompt(prompt)
+                extra_data = {}
+                if "extra_data" in json_data:  #@notneed
+                    extra_data = json_data["extra_data"]
+                if "client_id" in json_data:  #@notneed
+                    extra_data["client_id"] = json_data["client_id"]
+                if valid[0]:
+                    prompt_id = str(uuid.uuid4())  #@notneed
+                    outputs_to_execute = valid[2]
+
+                    # (2) main: prompt worker: execute
+                    # self.prompt_queue.put((number, prompt_id, prompt, extra_data, outputs_to_execute))
+                    e.execute(prompt, prompt_id, extra_data, outputs_to_execute)
+
+                    response = {
+                        "prompt_id": prompt_id,
+                        "number": 0,
+                        "node_errors": valid[3]
+                    }  #@notneed prompt_id, number
+                    return response
+                else:
+                    lg.error(f"invalid prompt: {valid[1]}")
+                    raise CustomError(message=valid[1], status="Error")
+            else:
+                raise CustomError(message="no prompt", status="Error")
+
+            # execute
+            # prompt worker postprocessing
+            # post prompt postprocessing
+
+    mq_subscriber = mq.RabbitMqConsumer(MQ_URL, MQ_CONSUME_QUEUE, callback)
+    mq_subscriber.subscribe()
+
+
 async def run(server, address='', port=8188, verbose=True, call_on_start=None):
     await asyncio.gather(server.start(address, port, verbose, call_on_start), server.publish_loop())
 
@@ -206,6 +252,7 @@ if __name__ == "__main__":
         q,
         server,
     )).start()
+    threading.Thread(target=mq_worker, daemon=True, args=(server, )).start()  # api
 
     if args.output_directory:
         output_dir = os.path.abspath(args.output_directory)

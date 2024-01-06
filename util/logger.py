@@ -18,6 +18,24 @@ def parent(path):
     return str(path.parent)
 
 
+def file_name(path):
+    """ 파일 이름 가져오기 (full path에서 마지막에 있는 파일 이름) """
+    path = pathlib.Path(path)
+    return path.name
+
+
+def file_stem(path):
+    """ 파일 이름에서 확장자 앞부분 가져오기 """
+    path = pathlib.Path(path)
+    return path.stem
+
+
+def file_suffix(path):
+    """ 확장자만 가져오기. (.을 포함함) """
+    path = pathlib.Path(path)
+    return path.suffix
+
+
 def mkdir(path):
     pathlib.Path(path).mkdir(parents=True, exist_ok=True)
 

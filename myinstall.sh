@@ -5,6 +5,7 @@ conda create -n primelabs python=3.11 anaconda=2023.09 -y
 conda activate primelabs
 pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu121 --no-input
 pip install -r requirements.txt
+pip install -r requirements-primelabs.txt
 
 # ======================================================== #
 # plguins
