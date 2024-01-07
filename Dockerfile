@@ -23,19 +23,19 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
 RUN bash -c "source ~/.bashrc"
 
 # setup venv
-ENV PYTHON_VERSION=3.9
+ENV PYTHON_VERSION=3.11
 RUN /opt/conda/bin/conda update -n base conda
 RUN /opt/conda/bin/conda install -y python=$PYTHON_VERSION
-RUN /opt/conda/bin/conda create -n py39 python=$PYTHON_VERSION
+RUN /opt/conda/bin/conda create -n py311 python=$PYTHON_VERSION
 RUN /opt/conda/bin/conda clean --all -y
 
-# activate venv
-RUN echo "source activate py39" > ~/.bashrc
+# use python3.11 in container
+RUN ln -s /opt/conda/envs/py311/bin/python3.11 /usr/bin/python3.11
 
-ENV PATH /opt/conda/envs/py39/bin:$PATH
+ENV PATH /opt/conda/envs/py311/bin:$PATH
 
-# Consolidate pip installs
-RUN pip install --no-cache-dir \
+# Consolidate pip installs with conda installs
+RUN /opt/conda/envs/py311/bin/pip install --no-cache-dir \
   torch \
   torchvision \
   torchaudio \
@@ -60,11 +60,11 @@ RUN /opt/conda/envs/py39/bin/pip install --no-cache-dir \
 
 COPY requirements.txt .
 
-RUN pip install --no-cache-dir -r requirements.txt
+RUN /opt/conda/envs/py311/bin/pip install --no-cache-dir -r requirements.txt
 
 COPY requirements-primelabs.txt .
 
-RUN pip install --no-cache-dir -r requirements-primelabs.txt
+RUN /opt/conda/envs/py311/bin/pip install --no-cache-dir -r requirements-primelabs.txt
 
 # Copy source code
 COPY . /app
@@ -72,5 +72,5 @@ COPY . /app
 # Set working directory
 WORKDIR /app
 
-# Run
-CMD ["python3", "main.py", "--listen", "0.0.0.0", "--port", "8188"]
+# Run whit conda env
+CMD ["/opt/conda/envs/py311/bin/python3", "main.py", "--listen", "0.0.0.0", "--port", "8188"]
