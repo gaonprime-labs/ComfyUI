@@ -38,6 +38,11 @@ RUN pip3 install --no-cache-dir \
   numba
 
 RUN pip3 install --no-cache-dir -r requirements.txt
+
+COPY requirements-primelabs.txt .
+
+RUN pip3 install --no-cache-dir -r requirements-primelabs.txt
+
 # Copy source code
 COPY . /app
 
