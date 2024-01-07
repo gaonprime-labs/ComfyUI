@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && add-apt-repository ppa:deadsnakes/ppa \
   && apt-get update \
   && apt-get install -y --no-install-recommends \
+  wget \
   build-essential \
   gcc \
   git \
