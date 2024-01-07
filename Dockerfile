@@ -42,7 +42,7 @@ RUN /opt/conda/envs/py311/bin/pip install --no-cache-dir \
   onnxruntime \
   --extra-index-url https://download.pytorch.org/whl/cu121
 
-RUN /opt/conda/envs/py39/bin/pip install --no-cache-dir \
+RUN /opt/conda/envs/py311/bin/pip install --no-cache-dir \
   opencv-python \
   opencv-python-headless \
   opencv-contrib-python \
