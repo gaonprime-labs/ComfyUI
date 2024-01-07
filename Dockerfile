@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && apt-get update \
   && apt-get install -y --no-install-recommends \
   build-essential \
-  python3.8 \
+  python3.11 \
   python3-pip \
   python3-setuptools \
   python3-wheel \
@@ -17,9 +17,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libgl1-mesa-glx \
   && rm -rf /var/lib/apt/lists/*
 
-COPY requirements-docker.txt .
+# Consolidate pip installs
+RUN pip3 install --no-cache-dir \
+  torch==2.1.1 \
+  torchaudio==2.1.1 \
+  torchvision==0.16.1 \
+  --extra-index-url https://download.pytorch.org/whl/cu121
 
-RUN pip3 install --no-cache-dir -r requirements-docker.txt
+COPY requirements-primelabs.txt .
+
+RUN pip3 install --no-cache-dir -r requirements-primelabs.txt
+
+COPY requirements.txt .
+
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy source code
 COPY . /app
