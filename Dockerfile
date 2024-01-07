@@ -40,8 +40,6 @@ RUN /opt/conda/envs/py39/bin/pip install --no-cache-dir \
   onnxruntime \
   --extra-index-url https://download.pytorch.org/whl/cu121
 
-COPY requirements.txt .
-
 RUN /opt/conda/envs/py39/bin/pip install --no-cache-dir \
   opencv-python \
   opencv-python-headless \
@@ -50,21 +48,20 @@ RUN /opt/conda/envs/py39/bin/pip install --no-cache-dir \
   matplotlib \
   basicsr \
   openai \
-  numba
-
-RUN /opt/conda/envs/py39/bin/pip install --no-cache-dir -r requirements.txt
-
-COPY requirements-primelabs.txt .
-
-RUN /opt/conda/envs/py39/bin/pip install --no-cache-dir -r requirements-primelabs.txt
-
-RUN /opt/conda/envs/py39/bin/pip install --no-cache-dir \
+  numba \
+  python-dotenv \
+  boto3 \
+  pika \
   simple_lama_inpainting \
   segment_anything \
   ultralytics \
   clip_interrogator \
   pyOpenSSL \
-  watchdog
+  watchdog 
+
+COPY requirements.txt .
+
+RUN /opt/conda/envs/py39/bin/pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
 COPY . /app
