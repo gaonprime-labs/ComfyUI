@@ -32,8 +32,10 @@ RUN /opt/conda/bin/conda clean --all -y
 # activate venv
 RUN echo "source activate py39" > ~/.bashrc
 
+ENV PATH /opt/conda/envs/py39/bin:$PATH
+
 # Consolidate pip installs
-RUN /opt/conda/envs/py39/bin/pip install --no-cache-dir \
+RUN pip install --no-cache-dir \
   torch \
   torchvision \
   torchaudio \
@@ -49,19 +51,20 @@ RUN /opt/conda/envs/py39/bin/pip install --no-cache-dir \
   basicsr \
   openai \
   numba \
-  python-dotenv \
-  boto3 \
-  pika \
   simple_lama_inpainting \
   segment_anything \
   ultralytics \
   clip_interrogator \
   pyOpenSSL \
-  watchdog 
+  watchdog
 
 COPY requirements.txt .
 
-RUN /opt/conda/envs/py39/bin/pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY requirements-primelabs.txt .
+
+RUN pip install --no-cache-dir -r requirements-primelabs.txt
 
 # Copy source code
 COPY . /app
