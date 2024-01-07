@@ -43,6 +43,14 @@ COPY requirements-primelabs.txt .
 
 RUN pip3 install --no-cache-dir -r requirements-primelabs.txt
 
+RUN pip3 install --no-cache-dir \
+  simple_lama_inpainting \
+  segment_anything \
+  ultralytics \
+  clip_interrogator \
+  pyOpenSSL \
+  watchdog
+
 # Copy source code
 COPY . /app
 
