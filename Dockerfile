@@ -7,18 +7,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && apt-get update \
   && apt-get install -y --no-install-recommends \
   build-essential \
-  python3.8 \
-  python3-pip \
-  python3-setuptools \
-  python3-wheel \
-  python3-dev \
   gcc \
   git \
   libgl1-mesa-glx \
   && rm -rf /var/lib/apt/lists/*
 
+# install conda
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh && \
+  bash ~/miniconda.sh -b -p /opt/conda && \
+  rm ~/miniconda.sh && \
+  /opt/conda/bin/conda clean -tipy && \
+  ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
+  echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc
+RUN bash -c "source ~/.bashrc"
+
+# setup venv
+ENV PYTHON_VERSION=3.9
+RUN /opt/conda/bin/conda update -n base conda
+RUN /opt/conda/bin/conda install -y python=$PYTHON_VERSION
+RUN /opt/conda/bin/conda create -n py39 python=$PYTHON_VERSION
+RUN /opt/conda/bin/conda clean --all -y
+
+# activate venv
+RUN echo "source activate py39" > ~/.bashrc
+
 # Consolidate pip installs
-RUN pip3 install --no-cache-dir \
+RUN /opt/conda/envs/py39/bin/pip install --no-cache-dir \
   torch \
   torchvision \
   torchaudio \
@@ -27,7 +41,7 @@ RUN pip3 install --no-cache-dir \
 
 COPY requirements.txt .
 
-RUN pip3 install --no-cache-dir \
+RUN /opt/conda/envs/py39/bin/pip install --no-cache-dir \
   opencv-python \
   opencv-python-headless \
   opencv-contrib-python \
@@ -37,13 +51,13 @@ RUN pip3 install --no-cache-dir \
   openai \
   numba
 
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN /opt/conda/envs/py39/bin/pip install --no-cache-dir -r requirements.txt
 
 COPY requirements-primelabs.txt .
 
-RUN pip3 install --no-cache-dir -r requirements-primelabs.txt
+RUN /opt/conda/envs/py39/bin/pip install --no-cache-dir -r requirements-primelabs.txt
 
-RUN pip3 install --no-cache-dir \
+RUN /opt/conda/envs/py39/bin/pip install --no-cache-dir \
   simple_lama_inpainting \
   segment_anything \
   ultralytics \
