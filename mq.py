@@ -96,7 +96,7 @@ class RabbitMq:
         self.mq_url = mq_url
         self.consume_queue = consume_queue
         self.callback = callback
-        params = pika.URLParameters(f"{mq_url}")
+        params = pika.URLParameters(f"{mq_url}/?heartbeat=300")
         self.connection = pika.BlockingConnection(params)
         self.channel = self.connection.channel()
         self.channel.basic_qos(prefetch_count=1)
