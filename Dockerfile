@@ -36,7 +36,7 @@ RUN ln -s /opt/conda/envs/py311/bin/pip /usr/local/bin/pip
 RUN ln -s /opt/conda/envs/py311/bin/pip /usr/local/bin/pip3
 
 # Consolidate pip installs
-RUN /opt/conda/envs/py311/bin/pip install --no-cache-dir \
+RUN pip install --no-cache-dir \
   torch==2.1.1 \
   torchaudio==2.1.1 \
   torchvision==0.16.1 \
@@ -44,11 +44,11 @@ RUN /opt/conda/envs/py311/bin/pip install --no-cache-dir \
 
 COPY requirements-primelabs.txt .
 
-RUN /opt/conda/envs/py311/bin/pip install --no-cache-dir -r requirements-primelabs.txt
+RUN pip install --no-cache-dir -r requirements-primelabs.txt
 
 COPY requirements.txt .
 
-RUN /opt/conda/envs/py311/bin/pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
 COPY . /app
@@ -57,4 +57,4 @@ COPY . /app
 WORKDIR /app
 
 # Run
-CMD ["/opt/conda/envs/py311/bin/python", "main.py", "--listen", "0.0.0.0", "--port", "8188"]
+CMD ["python", "main.py", "--listen", "0.0.0.0", "--port", "8188"]
