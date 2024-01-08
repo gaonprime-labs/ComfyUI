@@ -157,14 +157,15 @@ def mq_worker(server):
 
                     # (2) main: prompt worker: execute
                     # self.prompt_queue.put((number, prompt_id, prompt, extra_data, outputs_to_execute))
-                    e.execute(prompt, prompt_id, extra_data, outputs_to_execute)
-
-                    response = {
-                        "prompt_id": prompt_id,
-                        "number": 0,
-                        "node_errors": valid[3]
-                    }  #@notneed prompt_id, number
-                    return response
+                    success, error, ex = e.execute(prompt, prompt_id, extra_data, outputs_to_execute)
+                    # response = {
+                    #     "prompt_id": prompt_id,
+                    #     "number": 0,
+                    #     "node_errors": valid[3]
+                    # }  #@notneed prompt_id, number
+                    # return response
+                    if not success:
+                        raise CustomError(message=error, status="Error")
                 else:
                     lg.error(f"invalid prompt: {valid[1]}")
                     raise CustomError(message=valid[1], status="Error")

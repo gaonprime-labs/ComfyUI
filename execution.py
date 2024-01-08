@@ -409,6 +409,8 @@ class PromptExecutor:
             if comfy.model_management.DISABLE_SMART_MEMORY:
                 comfy.model_management.unload_all_models()
 
+            return (success, error, ex)
+
 
 def validate_inputs(prompt, item, validated):
     unique_id = item
