@@ -5,7 +5,8 @@ __pycache__/
 !/input/example.png
 /models/
 /temp/
-/custom_nodes/*
+/custom_nodes-orig/*
+# /custom_nodes/*
 # !/custom_nodes/ComfyUI-Manager/
 # !/custom_nodes/ComfyUI-Impact-Pack/
 # !/custom_nodes/ComfyUI-post-processing-nodes/
@@ -14,8 +15,8 @@ __pycache__/
 # !/custom_nodes/comfyui_controlnet_aux/
 # !/custom_nodes/masquerade-nodes-comfyui/
 # !/custom_nodes/was-node-suite-comfyui/
-!/custom_nodes/ComfyUI-Primelabs/custom_s3.py
-!/custom_nodes/example_node.py.example
+# !/custom_nodes/ComfyUI-Primelabs/custom_s3.py
+# !/custom_nodes/example_node.py.example
 extra_model_paths.yaml
 /.vs
 .idea/

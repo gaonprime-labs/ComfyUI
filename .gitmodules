@@ -1,0 +1,3 @@
+[submodule "custom_nodes"]
+	path = custom_nodes
+	url = git@github.com:gaonprime-labs/custom_nodes.git
