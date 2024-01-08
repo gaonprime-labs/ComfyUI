@@ -39,3 +39,13 @@ torch.from_numpy(
 from util.all import *
 
 file_suffix("dssfd.x")
+
+#%% # ==================================================== #
+#
+# ======================================================== #
+import traceback
+try:
+    assert False
+except Exception as e:
+    print("stack", traceback.format_exc())
+    print("e", e)
