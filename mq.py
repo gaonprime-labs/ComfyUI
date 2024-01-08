@@ -121,7 +121,8 @@ class RabbitMq:
                             "data": {
                                 "status": "Done",
                                 "message": "",
-                                "response": response
+                                "response": response,
+                                "jobId": input_body["data"]["jobId"]
                             }
                         }
                     except Exception as e:
