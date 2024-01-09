@@ -57,4 +57,4 @@ COPY . /app
 WORKDIR /app
 
 # Run
-CMD ["python", "main.py", "--listen", "0.0.0.0", "--port", "8188", "--disable_metadata"]
+CMD ["python", "main.py", "--listen", "0.0.0.0", "--port", "8188", "--disable-metadata"]
