@@ -26,3 +26,8 @@ cp /home/hosan/ai/ComfyUI/models/checkpoints/aipf_snow_woman_xxmix_9realistic_sd
 # ======================================================== #
 cp /home/hosan/ai/ComfyUI/input/1.jpg input
 cp /home/hosan/ai/ComfyUI/input/tgt_alwayz15.png input
+
+# ======================================================== #
+# save
+# ======================================================== #
+scp -r h2500:/home/hosan/workspace/primelabs/services/ComfyUI/media/ .
